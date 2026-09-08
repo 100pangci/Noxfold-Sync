@@ -1057,11 +1057,13 @@
     <string name="cert_check_validity">Kehtivusaeg</string>
     <string name="cert_check_key">Privaatvõti</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">Kaustagrupp</string>
+    <string name="folder_group_ungrouped">Rühmitamata</string>
+    <string name="folder_group_new_group">Uus grupp</string>
+    <string name="folder_group_new_group_name">Grupi nimi</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">Seadmete grupp</string>
+
+    <string name="saf_bridge_reauthorize_card">Vajalik on autoriseerimine — puudutage juurdepääsu lubamiseks</string>
 
 </resources>

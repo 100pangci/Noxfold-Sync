@@ -71,7 +71,7 @@
     <string name="photo_shoot_take_picture_failure">Nepodařilo se vám pořídit snímek nebo jste ho zrušili.</string>
 
     <!-- Label of the folder created by the Syncthing Camera feature. -->
-    <string name="default_syncthing_camera_folder_label">Syncthing Camera</string>
+    <string name="default_syncthing_camera_folder_label">Kamera Syncthing</string>
 
     <!-- MainActivity -->
 
@@ -1057,11 +1057,13 @@
     <string name="cert_check_validity">Doba platnosti</string>
     <string name="cert_check_key">Soukromý klíč</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">Skupina složek</string>
+    <string name="folder_group_ungrouped">Neseskupeno</string>
+    <string name="folder_group_new_group">Nová skupina</string>
+    <string name="folder_group_new_group_name">Název skupiny</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">Skupina zařízení</string>
+
+    <string name="saf_bridge_reauthorize_card">Vyžaduje se autorizace — klepnutím udělíte přístup</string>
 
 </resources>

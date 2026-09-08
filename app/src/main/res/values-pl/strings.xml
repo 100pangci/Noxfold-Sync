@@ -1057,11 +1057,13 @@
     <string name="cert_check_validity">Okres ważności</string>
     <string name="cert_check_key">Klucz prywatny</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">Grupa folderów</string>
+    <string name="folder_group_ungrouped">Bez grupy</string>
+    <string name="folder_group_new_group">Nowa grupa</string>
+    <string name="folder_group_new_group_name">Nazwa grupy</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">Grupa urządzeń</string>
+
+    <string name="saf_bridge_reauthorize_card">Wymagana autoryzacja — dotknij, aby przyznać dostęp</string>
 
 </resources>

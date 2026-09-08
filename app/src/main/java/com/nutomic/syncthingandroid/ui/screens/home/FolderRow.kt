@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.ui.theme.StatusBadge
+import com.nutomic.syncthingandroid.ui.theme.statusWarning
 import com.nutomic.syncthingandroid.util.FileUtils
 import com.nutomic.syncthingandroid.util.Util
 
@@ -52,6 +53,11 @@ import com.nutomic.syncthingandroid.util.Util
  * One folder row inside a [HomeGroupCard] (pure renderer; all data is
  * precomputed in [FolderUiModel]). Tapping the row opens the folder settings,
  * the trailing icon opens the folder in the system file manager.
+ *
+ * When [FolderUiModel.needsSafAuthorization] is true the row shows an amber
+ * "Authorization required" pill in the sync-status area and routes the tap to
+ * [onReauthorize] (re-launches the SAF picker) instead of [onEdit]; the folder
+ * name stays visible so the user can tell which folder is affected.
  */
 @Composable
 internal fun FolderRowContent(
@@ -59,6 +65,7 @@ internal fun FolderRowContent(
     onEdit: (FolderUiModel) -> Unit,
     onOverride: (FolderUiModel) -> Unit,
     onRevert: (FolderUiModel) -> Unit,
+    onReauthorize: (FolderUiModel) -> Unit = {},
 ) {
     val context = LocalContext.current
     var showOverrideConfirm by remember { mutableStateOf(false) }
@@ -68,7 +75,7 @@ internal fun FolderRowContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onEdit(model) }
+            .clickable { if (model.needsSafAuthorization) onReauthorize(model) else onEdit(model) }
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -177,6 +184,38 @@ internal fun FolderRowContent(
         }
 
         Spacer(Modifier.height(4.dp))
+        if (model.needsSafAuthorization) {
+            // Amber warning pill in the sync-status area. Fixed amber
+            // (statusWarning, #F9A825) on both light and dark themes so it
+            // stands out in the list at a glance; StatusBadge's own
+            // container-alpha (0.14) keeps the MD3 tonal-chip look
+            // consistent with the other status pills.
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = statusWarning.copy(alpha = 0.14f),
+                contentColor = statusWarning,
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .clickable { onReauthorize(model) }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Warning,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = stringResource(R.string.saf_bridge_reauthorize_card),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()

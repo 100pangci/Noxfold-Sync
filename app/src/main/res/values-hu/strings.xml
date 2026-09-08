@@ -1057,11 +1057,13 @@
     <string name="cert_check_validity">Érvényességi időszak</string>
     <string name="cert_check_key">Titkos kulcs</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">Mappák csoportja</string>
+    <string name="folder_group_ungrouped">Nincs csoportosítva</string>
+    <string name="folder_group_new_group">Új csoport</string>
+    <string name="folder_group_new_group_name">Csoport neve</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">Eszközök csoportja</string>
+
+    <string name="saf_bridge_reauthorize_card">Engedély szükséges — érintse meg a hozzáférés megadásához</string>
 
 </resources>

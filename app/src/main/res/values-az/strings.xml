@@ -1090,11 +1090,13 @@
     <string name="cert_check_validity">Etibarlılıq müddəti</string>
     <string name="cert_check_key">Şəxsi açar</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">Qovluq qrupu</string>
+    <string name="folder_group_ungrouped">Qruplaşdırılmayıb</string>
+    <string name="folder_group_new_group">Yeni qrup</string>
+    <string name="folder_group_new_group_name">Qrup adı</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">Cihaz qrupu</string>
+
+    <string name="saf_bridge_reauthorize_card">İcazə tələb olunur — giriş vermək üçün toxunun</string>
 
 </resources>

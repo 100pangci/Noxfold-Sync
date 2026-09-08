@@ -311,6 +311,8 @@
     <string name="folder_path_readonly">Your Android version only grants Syncthing readonly access to the selected folder.</string>
     <string name="saf_bridge_folder_mapped">This location is provided by another app. Syncthing will forward it automatically so it can be synced.</string>
     <string name="saf_bridge_needs_authorization">This folder is forwarded from another app and needs to be authorized again. Select the folder in the next dialog.</string>
+    <!-- Warning pill on the folder list card when the SAF grant was lost; tap re-launches the picker. -->
+    <string name="saf_bridge_reauthorize_card">Authorization required — tap to grant access</string>
 
     <!-- Summary shown if we only have readwrite access to the folder path -->
     <string name="folder_path_readwrite">Your Android version grants Syncthing read and write access to the selected folder.</string>

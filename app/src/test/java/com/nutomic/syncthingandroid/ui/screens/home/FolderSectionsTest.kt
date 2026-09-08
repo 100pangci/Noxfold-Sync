@@ -30,6 +30,7 @@ class FolderSectionsTest {
         statusKind = com.nutomic.syncthingandroid.ui.theme.StatusKind.OK,
         isSyncing = false,
         completion = 100,
+        needsSafAuthorization = false,
     )
 
     private val natural = Comparator<String> { a, b -> a.compareTo(b) }

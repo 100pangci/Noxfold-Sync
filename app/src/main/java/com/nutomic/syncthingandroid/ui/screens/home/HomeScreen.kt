@@ -1,5 +1,11 @@
 package com.nutomic.syncthingandroid.ui.screens.home
 
+import android.content.Intent
+import android.net.Uri
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,9 +58,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.model.Device
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
+import com.nutomic.syncthingandroid.service.SafBridge
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
@@ -279,15 +288,68 @@ private fun FolderListPage(
             )
             .apply()
     }
+    // Pending re-authorization target: remembered across recompositions so the
+    // picker result can be matched back to the tapped card. Cleared on cancel
+    // and right after a successful reauthorize; the HomeDataHost poll then
+    // flips needsSafAuthorization back to false and the card restores itself.
+    var pendingReauthFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Same SAF picker contract as FolderEditScreen (OpenDocumentTree): take a
+    // persistable grant, then reauthorize() the EXISTING forwarded path so the
+    // imported config keeps working without a rewrite.
+    val safLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        val folderId = pendingReauthFolderId
+        pendingReauthFolderId = null
+        if (uri == null || folderId == null) return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        } catch (e: SecurityException) {
+            Log.w("FolderListPage", "takePersistableUriPermission failed for $uri", e)
+            return@rememberLauncherForActivityResult
+        }
+        val target = folders.find { it.id == folderId } ?: return@rememberLauncherForActivityResult
+        val safBridge = (context.applicationContext as SyncthingApp).safBridge
+        if (SafBridge.requiresBridge(uri)) {
+            // Third-party provider root: path-stable re-authorization.
+            safBridge.reauthorize(target.path, uri)
+            Toast.makeText(
+                context, R.string.saf_bridge_folder_mapped, Toast.LENGTH_LONG
+            ).show()
+        } else {
+            // Plain storage location: no bridge mapping exists, so there is
+            // nothing to reauthorize here — open the editor for a manual fix.
+            navigator.openFolderEdit(target.id, false)
+        }
+        // No manual refresh: HomeDataHost re-polls buildFolderUiModels at
+        // GUI_UPDATE_INTERVAL and publishes the updated models via the
+        // LocalHomeFolderModels flow/state, restoring the normal card.
+    }
     // Stable callbacks: combined with the FolderUiModel data class equality,
     // rows whose content did not change are skipped while scrolling.
     val onEdit: (FolderUiModel) -> Unit = remember(navigator) {
         { model -> navigator.openFolderEdit(model.id, false) }
     }
+    // Intercepted tap for needsSafAuthorization cards: launch the SAF picker
+    // directly instead of opening the editor (the editor would only do the
+    // same via its auto-popup effect). Normal folders keep onEdit.
+    val onReauthorize: (FolderUiModel) -> Unit = remember(safLauncher) {
+        { model ->
+            pendingReauthFolderId = model.id
+            Toast.makeText(
+                context, R.string.saf_bridge_needs_authorization, Toast.LENGTH_LONG
+            ).show()
+            safLauncher.launch(null)
+        }
+    }
     val onOverride: (FolderUiModel) -> Unit = remember(context) {
         { model ->
             context.startService(
-                android.content.Intent(context, SyncthingService::class.java).apply {
+                Intent(context, SyncthingService::class.java).apply {
                     putExtra(SyncthingService.EXTRA_FOLDER_ID, model.id)
                     action = SyncthingService.ACTION_OVERRIDE_CHANGES
                 }
@@ -297,7 +359,7 @@ private fun FolderListPage(
     val onRevert: (FolderUiModel) -> Unit = remember(context) {
         { model ->
             context.startService(
-                android.content.Intent(context, SyncthingService::class.java).apply {
+                Intent(context, SyncthingService::class.java).apply {
                     putExtra(SyncthingService.EXTRA_FOLDER_ID, model.id)
                     action = SyncthingService.ACTION_REVERT_LOCAL_CHANGES
                 }
@@ -330,6 +392,7 @@ private fun FolderListPage(
                         onEdit = onEdit,
                         onOverride = onOverride,
                         onRevert = onRevert,
+                        onReauthorize = onReauthorize,
                     )
                     if (index < section.items.lastIndex) {
                         GroupRowDivider()

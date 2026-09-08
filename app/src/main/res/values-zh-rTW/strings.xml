@@ -71,7 +71,7 @@
     <string name="photo_shoot_take_picture_failure">無法拍照或您已取消。</string>
 
     <!-- Label of the folder created by the Syncthing Camera feature. -->
-    <string name="default_syncthing_camera_folder_label">Syncthing Camera</string>
+    <string name="default_syncthing_camera_folder_label">Syncthing 相機</string>
 
     <!-- MainActivity -->
 
@@ -300,6 +300,8 @@
     <string name="folder_path_readonly">您的 Android 版本僅授予 Syncthing 所選資料夾的唯讀存取權限。</string>
     <string name="saf_bridge_folder_mapped">該位置由其他應用程式提供,Syncthing 將自動轉送它以便同步。</string>
     <string name="saf_bridge_needs_authorization">該資料夾由其他應用程式轉送,需要重新授權。請在接下來的對話框中選擇該資料夾。</string>
+    <!-- 主頁資料夾卡片上的授權提示;點擊重新拉起選擇器。 -->
+    <string name="saf_bridge_reauthorize_card">需要授權 — 點擊授予存取權限</string>
 
     <!-- Summary shown if we only have readwrite access to the folder path -->
     <string name="folder_path_readwrite">您的 Android 版本授予 Syncthing 所選資料夾的讀寫存取權限。</string>
