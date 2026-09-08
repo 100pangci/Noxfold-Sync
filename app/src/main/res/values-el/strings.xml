@@ -1072,4 +1072,6 @@
 
     <string name="device_group_label">Device Group</string>
 
+    <string name="saf_bridge_reauthorize_card">Authorization required — tap to grant access</string>
+
 </resources>

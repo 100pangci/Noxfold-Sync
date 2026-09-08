@@ -300,6 +300,8 @@
     <string name="folder_path_readonly">您的 Android 版本仅授予 Syncthing 对所选文件夹的只读访问权限。</string>
     <string name="saf_bridge_folder_mapped">该位置由其他应用提供,Syncthing 将自动转发它以便同步。</string>
     <string name="saf_bridge_needs_authorization">该文件夹由其他应用转发,需要重新授权。请在接下来的对话框中选择该文件夹。</string>
+    <!-- 主页文件夹卡片上的授权提示;点击重新拉起选择器。 -->
+    <string name="saf_bridge_reauthorize_card">Authorization required — tap to grant access</string>
 
     <!-- Summary shown if we only have readwrite access to the folder path -->
     <string name="folder_path_readwrite">您的 Android 版本授予 Syncthing 对所选文件夹的读写权限。</string>

@@ -2,6 +2,7 @@ package com.nutomic.syncthingandroid.ui.screens.home
 
 import android.content.Context
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.RestApi
@@ -36,6 +37,19 @@ data class FolderUiModel(
     val statusKind: StatusKind,
     val isSyncing: Boolean,
     val completion: Int,
+
+    /**
+     * True when the folder lives in the SAF forwarding root but the persisted
+     * URI grant is gone (fresh install + config import). The card shows the
+     * [R.string.saf_bridge_reauthorize_card] warning and intercepts taps for
+     * re-authorization instead of opening the editor.
+     *
+     * Precomputed here on the polling dispatcher via [SafBridge.needsAuthorization]
+     * so the row stays a pure renderer; the continuously-polled flow in
+     * HomeDataHost flips it back to false after re-authorization, which
+     * automatically restores the normal card.
+     */
+    val needsSafAuthorization: Boolean,
 )
 
 /**
@@ -66,6 +80,12 @@ fun buildFolderUiModels(
         var revertLabelRes = R.string.revert_local_changes
         var isSyncing = false
         var completion = 100
+
+        // SAF grant state: cheap pref + persisted-permission lookup, no REST
+        // involved. Data-source logic itself is untouched (still SafBridge);
+        // the model only surfaces it so the card can render the warning.
+        val needsSafAuthorization =
+            (context.applicationContext as SyncthingApp).safBridge.needsAuthorization(folder.path)
 
         val folderStatusEntry = if (api != null && apiConfigLoaded) api.getFolderStatus(folder.id) else null
         if (folderStatusEntry != null) {
@@ -218,6 +238,7 @@ fun buildFolderUiModels(
             statusKind = statusKind,
             isSyncing = isSyncing,
             completion = completion,
+            needsSafAuthorization = needsSafAuthorization,
         )
     }
 }
