@@ -71,7 +71,7 @@
     <string name="photo_shoot_take_picture_failure">Det gick inte att ta en bild eller så har du avbrutit.</string>
 
     <!-- Label of the folder created by the Syncthing Camera feature. -->
-    <string name="default_syncthing_camera_folder_label">Syncthing Camera</string>
+    <string name="default_syncthing_camera_folder_label">Syncthing-kamera</string>
 
     <!-- MainActivity -->
 

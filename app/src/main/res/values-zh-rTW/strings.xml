@@ -71,7 +71,7 @@
     <string name="photo_shoot_take_picture_failure">無法拍照或您已取消。</string>
 
     <!-- Label of the folder created by the Syncthing Camera feature. -->
-    <string name="default_syncthing_camera_folder_label">Syncthing Camera</string>
+    <string name="default_syncthing_camera_folder_label">Syncthing 相機</string>
 
     <!-- MainActivity -->
 

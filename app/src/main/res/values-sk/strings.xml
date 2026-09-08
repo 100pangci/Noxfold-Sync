@@ -73,7 +73,7 @@
     <string name="photo_shoot_take_picture_failure">Nepodarilo sa nasnímať fotografiu alebo ste ju zrušili.</string>
 
     <!-- Label of the folder created by the Syncthing Camera feature. -->
-    <string name="default_syncthing_camera_folder_label">Syncthing Camera</string>
+    <string name="default_syncthing_camera_folder_label">Syncthing kamera</string>
 
     <!-- MainActivity -->
 
