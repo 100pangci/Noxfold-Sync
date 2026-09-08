@@ -1,15 +1,12 @@
-v2.1.3.3: root mode hardening + AMOLED pure-black cards.
+v2.1.5.0: Syncthing core upgraded from v2.1.3 to the stable v2.1.5 release.
 
 ## New
-* **Root mode promoted out of Experimental**: moved to the Behavior settings page as a first-class option (with the same confirmation dialog, busy state and auth-failure handling)
-* **Add buttons moved to a FAB**: add folder / device now lives in the bottom-right FAB (same spot as the folder editor save button), switching with the current tab; status tab shows no FAB; top bar keeps global actions (rescan, settings)
-* **AMOLED pure-black theme**: cards are now pure black with a faint outline instead of dark-gray blocks; bottom bar pure black with a top hairline to match
+* **Syncthing core pinned to stable v2.1.5**: bundled core upgraded from v2.1.3 — config format (version 52) and REST API unchanged, no app-side code changes required
+* Core v2.1.4: all outgoing HTTP requests now send a User-Agent header (upstream #10867)
+* Core v2.1.5: build / packaging fixes upstream; no functional changes for the Android app
 
-## Fixed
-* Root mode hardening: shell-quoted write probes, root pre-checks moved off the main thread (cold-start ANR gone), `find` kills narrowed to this app's sync dirs, zombie waits capped (SIGKILL escalation + give-up), restart race during STARTING retried (up to 30x), env keys validated and quoted
-* Stale root core self-healing after force-stop: loopback TCP connect replaces SELinux-blocked netstat probing, port-owner kill as fallback, automatic restart retry (up to 2x) with a "port busy" notice instead of a cryptic failure
-* Planned shutdowns (e.g. root toggle restarts) no longer misreported as crashes on exit code 137
-* Housekeeping: all remaining researchxxl links (38 languages, Play listings, wiki, workflows) now point at this repo; dead scripts, resources and catalog entries removed
+## Notes
+* App UI, SAF bridge and root mode are unchanged since v2.1.3.3
 
 ## Known limitations
 * Root mode is experimental: verified on a single Magisk / HyperOS device; KernelSU untested
@@ -18,16 +15,15 @@ v2.1.3.3: root mode hardening + AMOLED pure-black cards.
 
 ---
 
-## 新增
-* **Root 模式移出"实验性"**：搬入"行为"设置页成为正式选项（保留确认弹窗、忙碌禁用态与授权失败中止逻辑）
-* **添加按钮移至 FAB**：添加文件夹 / 设备改到右下角悬浮按钮（与文件夹编辑保存按钮同位），随当前标签页切换；状态页不显示；顶栏仅保留全局动作（重扫、设置）
-* **AMOLED 纯净主题**：卡片改为纯黑底 + 淡描边，不再是深灰色块；底栏纯黑 + 顶部细线呼应
+v2.1.5.0：Syncthing 核心由 v2.1.3 升级到稳定版 v2.1.5。
 
-## 修复
-* Root 模式加固：写探测转义、Root 预检移出主线程（冷启动 ANR 消除）、`find` 击杀收窄到本应用同步目录、僵死等待限时（SIGKILL 升级 + 放弃）、STARTING 态重启竞态重试（上限 30 次）、环境变量 key 校验与转义
-* 强停后残留 Root 核心自愈：回环 TCP 连接探测替代被 SELinux 拦截的 netstat、端口属主击杀兜底、自动重试启动（上限 2 次）并提示"端口被占"，不再莫名失败
-* 计划内关停（如 Root 开关切换重启）不再把退出码 137 误报为崩溃
-* 清理：残留 researchxxl 链接（38 种语言、Play 商店描述、wiki、工作流）全部指向本仓库；删除无用脚本、资源与目录项
+## 新增
+* **Syncthing 核心锁定稳定版 v2.1.5**：内置核心由 v2.1.3 升级——配置格式（版本 52）与 REST API 均无变化，无需改动应用代码
+* 核心 v2.1.4：所有外发 HTTP 请求现在都会携带 User-Agent（上游 #10867）
+* 核心 v2.1.5：上游构建 / 打包修复；对 Android 端无功能影响
+
+## 说明
+* 应用界面、SAF 桥接与 Root 模式自 v2.1.3.3 起无改动
 
 ## 已知限制
 * Root 模式为实验性：仅在单台 Magisk/HyperOS 设备验证
