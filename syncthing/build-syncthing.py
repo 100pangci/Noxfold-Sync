@@ -172,9 +172,6 @@ def install_go():
     else:
         from urllib import urlretrieve
 
-    if not os.path.isdir(prerequisite_tools_dir):
-        os.makedirs(prerequisite_tools_dir)
-
     expected_version = get_expected_go_version()
     print('Required Go version:', expected_version)
 
@@ -191,6 +188,9 @@ def install_go():
         return
     
     print('System Go version differs from required. Building Go', expected_version, 'from source using system Go as bootstrap...')
+
+    if not os.path.isdir(prerequisite_tools_dir):
+        os.makedirs(prerequisite_tools_dir)
 
     # Download Go source code from GitHub
     go_source_url = 'https://github.com/golang/go/archive/go' + expected_version + '.tar.gz'
