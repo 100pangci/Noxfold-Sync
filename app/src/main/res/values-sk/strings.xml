@@ -124,10 +124,10 @@
     <string name="folder_list_empty">Žiadne adresáre</string>
 
     <!-- Format string for folder file count -->
-    <plurals name="files">        <item quantity="one">%1$d / %2$d súbor</item>        <item quantity="few">%1$d / %2$d súbory</item>        <item quantity="other">%1$d / %2$d súborov</item></plurals>
+    <plurals name="files">        <item quantity="one">%1$d / %2$d súbor</item>        <item quantity="few">%1$d / %2$d súbory</item>        <item quantity="many">%1$d / %2$d súborov</item> <item quantity="other">%1$d / %2$d súborov</item></plurals>
 
     <!-- Format string for conflict file count -->
-    <plurals name="conflicts">        <item quantity="one">%1$d konflikt</item>        <item quantity="few">%1$d konflikty</item>        <item quantity="other">%1$d konfliktov</item></plurals>
+    <plurals name="conflicts">        <item quantity="one">%1$d konflikt</item>        <item quantity="few">%1$d konflikty</item>        <item quantity="many">%1$d konfliktov</item> <item quantity="other">%1$d konfliktov</item></plurals>
 
     <string name="override_changes">Vynútiť zmeny</string>
 
@@ -809,10 +809,10 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
     <string name="nothing_share">Nie je čo zdieľať</string>
 
     <!-- Copy success toast partially -->
-    <plurals name="copy_success_partially">        <item quantity="one">%1$d súbor skopírovaný do adresára „%2$s“, %3$d už existuje</item>        <item quantity="few">%1$d súbory skopírované do adresára „%2$s“, %3$d už existujú</item>        <item quantity="other">%1$d súborov skopírovaných do adresára „%2$s“, %3$d už existuje</item></plurals>
+    <plurals name="copy_success_partially">        <item quantity="one">%1$d súbor skopírovaný do adresára „%2$s“, %3$d už existuje</item>        <item quantity="few">%1$d súbory skopírované do adresára „%2$s“, %3$d už existujú</item>        <item quantity="many">%1$d súborov skopírovaných do adresára „%2$s“, %3$d už existuje</item> <item quantity="other">%1$d súborov skopírovaných do adresára „%2$s“, %3$d už existuje</item></plurals>
 
     <!-- Copy success toast -->
-    <plurals name="copy_success">        <item quantity="one">%1$d súbor skopírovaný do adresára „%2$s“</item>        <item quantity="few">%1$d súbory skopírované do adresára „%2$s“</item>        <item quantity="other">%1$d súborov skopírovaných do adresára „%2$s“</item></plurals>
+    <plurals name="copy_success">        <item quantity="one">%1$d súbor skopírovaný do adresára „%2$s“</item>        <item quantity="few">%1$d súbory skopírované do adresára „%2$s“</item>        <item quantity="many">%1$d súborov skopírovaných do adresára „%2$s“</item> <item quantity="other">%1$d súborov skopírovaných do adresára „%2$s“</item></plurals>
 
     <!-- Copy exception toast -->
     <string name="copy_exception">Počas zdieľania sa vyskytla chyba, skontrolujte záznamy aplikácie</string>
@@ -820,7 +820,7 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
     <!-- Copy progress dialog text -->
     <string name="copy_progress">Zdieľajú sa súbory…</string>
 
-    <plurals name="file_name_title">        <item quantity="one">Názov súboru</item>        <item quantity="few">Názvy súborov</item>        <item quantity="other">Zoznam súborov</item></plurals>
+    <plurals name="file_name_title">        <item quantity="one">Názov súboru</item>        <item quantity="few">Názvy súborov</item>        <item quantity="many">Zoznam súborov</item> <item quantity="other">Zoznam súborov</item></plurals>
 
     <!-- Sub Folder title -->
 
@@ -832,7 +832,7 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
     <!-- Explanations why syncthing is running or not running -->
     <string name="reason_not_within_time_frame_2">Povolili ste možnosť „Spúšťať podľa časového plánu“ a posledná synchronizácia bola pred %s.</string>
     <string name="reason_not_within_time_frame_0_min">menej ako minúta</string>
-    <plurals name="reason_not_within_time_frame_minutes">        <item quantity="one">%d minúta</item>        <item quantity="few">%d minúty</item>        <item quantity="other">%d minút</item></plurals>
+    <plurals name="reason_not_within_time_frame_minutes">        <item quantity="one">%d minúta</item>        <item quantity="few">%d minúty</item>        <item quantity="many">%d minút</item> <item quantity="other">%d minút</item></plurals>
     <string name="reason_not_charging">Telefón sa nenabíja.</string>
     <string name="reason_not_on_battery_power">Telefón nie je napájaný z batérie.</string>
     <string name="reason_not_while_power_saving">Syncthing nebeží, pretože telefón je aktuálne v režime šetrenia energie.</string>
@@ -873,9 +873,9 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
     <string name="syncthing_active_details">Beží: %1$s</string>
     <string name="no_remote_devices_connected">Nie sú pripojené žiadne vzdialené zariadenia</string>
 
-    <plurals name="device_online_up_to_date">        <item quantity="one">%1$d zariadenie online a aktuálne</item>        <item quantity="few">%1$d zariadenia online a aktuálne</item>        <item quantity="other">%1$d zariadení online a aktuálnych</item></plurals>
+    <plurals name="device_online_up_to_date">        <item quantity="one">%1$d zariadenie online a aktuálne</item>        <item quantity="few">%1$d zariadenia online a aktuálne</item>        <item quantity="many">%1$d zariadení online a aktuálnych</item> <item quantity="other">%1$d zariadení online a aktuálnych</item></plurals>
 
-    <plurals name="syncthing_active_syncing_device_online">        <item quantity="one">Synchronizácia: %1$d%% hotová, %2$d zariadenie online</item>        <item quantity="few">Synchronizácia: %1$d%% hotová, %2$d zariadenia online</item>        <item quantity="other">Synchronizácia: %1$d%% hotová, %2$d zariadení online</item></plurals>
+    <plurals name="syncthing_active_syncing_device_online">        <item quantity="one">Synchronizácia: %1$d%% hotová, %2$d zariadenie online</item>        <item quantity="few">Synchronizácia: %1$d%% hotová, %2$d zariadenia online</item>        <item quantity="many">Synchronizácia: %1$d%% hotová, %2$d zariadení online</item> <item quantity="other">Synchronizácia: %1$d%% hotová, %2$d zariadení online</item></plurals>
 
     <string name="syncthing_disabled">Spiace</string>
 
