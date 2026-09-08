@@ -1057,13 +1057,13 @@
     <string name="cert_check_validity">תקופת תוקף</string>
     <string name="cert_check_key">מפתח פרטי</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">קבוצת תיקיות</string>
+    <string name="folder_group_ungrouped">ללא קבוצה</string>
+    <string name="folder_group_new_group">קבוצה חדשה</string>
+    <string name="folder_group_new_group_name">שם הקבוצה</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">קבוצת מכשירים</string>
 
-    <string name="saf_bridge_reauthorize_card">Authorization required — tap to grant access</string>
+    <string name="saf_bridge_reauthorize_card">נדרשת הרשאה — הקש כדי להעניק גישה</string>
 
 </resources>

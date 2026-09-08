@@ -1063,13 +1063,13 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
     <string name="cert_check_validity">Obdobie platnosti</string>
     <string name="cert_check_key">Súkromný kľúč</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">Skupina priečinkov</string>
+    <string name="folder_group_ungrouped">Bez skupiny</string>
+    <string name="folder_group_new_group">Nová skupina</string>
+    <string name="folder_group_new_group_name">Názov skupiny</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">Skupina zariadení</string>
 
-    <string name="saf_bridge_reauthorize_card">Authorization required — tap to grant access</string>
+    <string name="saf_bridge_reauthorize_card">Vyžaduje sa autorizácia — klepnutím udelíte prístup</string>
 
 </resources>

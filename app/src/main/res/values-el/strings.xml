@@ -1065,13 +1065,13 @@
     <string name="cert_check_validity">Περίοδος ισχύος</string>
     <string name="cert_check_key">Ιδιωτικό κλειδί</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">Ομάδα φακέλων</string>
+    <string name="folder_group_ungrouped">Χωρίς ομάδα</string>
+    <string name="folder_group_new_group">Νέα ομάδα</string>
+    <string name="folder_group_new_group_name">Όνομα ομάδας</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">Ομάδα συσκευών</string>
 
-    <string name="saf_bridge_reauthorize_card">Authorization required — tap to grant access</string>
+    <string name="saf_bridge_reauthorize_card">Απαιτείται εξουσιοδότηση — πατήστε για να παραχωρήσετε πρόσβαση</string>
 
 </resources>

@@ -1070,13 +1070,13 @@
     <string name="cert_check_validity">ماوەی دروستی</string>
     <string name="cert_check_key">کلیلی تایبەت</string>
     <!-- Folder group (shown in the folder form and as home screen section headers) -->
-    <string name="folder_group_label">Folder Group</string>
-    <string name="folder_group_ungrouped">Ungrouped</string>
-    <string name="folder_group_new_group">New Group</string>
-    <string name="folder_group_new_group_name">Group name</string>
+    <string name="folder_group_label">گروپی فۆڵدەرەکان</string>
+    <string name="folder_group_ungrouped">بێ گروپ</string>
+    <string name="folder_group_new_group">گروپی نوێ</string>
+    <string name="folder_group_new_group_name">ناوی گروپ</string>
 
-    <string name="device_group_label">Device Group</string>
+    <string name="device_group_label">گروپی ئامێرەکان</string>
 
-    <string name="saf_bridge_reauthorize_card">Authorization required — tap to grant access</string>
+    <string name="saf_bridge_reauthorize_card">ڕێپێدان پێویستە — کرتە بکە بۆ ڕێگەدان</string>
 
 </resources>
