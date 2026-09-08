@@ -1062,8 +1062,8 @@
     <string name="folder_group_new_group">Nouveau groupe</string>
     <string name="folder_group_new_group_name">Nom du groupe</string>
 
-    <string name="device_group_label">Groupe d'appareils</string>
+    <string name="device_group_label">Groupe d\'appareils</string>
 
-    <string name="saf_bridge_reauthorize_card">Autorisation requise — touchez pour accorder l'accès</string>
+    <string name="saf_bridge_reauthorize_card">Autorisation requise — touchez pour accorder l\'accès</string>
 
 </resources>

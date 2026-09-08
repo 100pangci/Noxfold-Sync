@@ -1064,6 +1064,6 @@
 
     <string name="device_group_label">Gruppo di dispositivi</string>
 
-    <string name="saf_bridge_reauthorize_card">Autorizzazione richiesta — tocca per concedere l'accesso</string>
+    <string name="saf_bridge_reauthorize_card">Autorizzazione richiesta — tocca per concedere l\'accesso</string>
 
 </resources>
