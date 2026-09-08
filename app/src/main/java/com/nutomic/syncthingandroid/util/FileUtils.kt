@@ -1012,11 +1012,11 @@ object FileUtils {
         val fileExtension = MimeTypeMap.getFileExtensionFromUrl(fileNameAndExtension)
         val fileMimeType = getMimeTypeFromFileExtension(fileExtension)
 
-        var fileName = fileNameAndExtension
-        val dotIndex = fileNameAndExtension.lastIndexOf('.')
-        if (dotIndex > 0) {
-            fileName = fileNameAndExtension.substring(0, dotIndex)
-        }
+        // The display name passed to createDocument MUST equal the name the
+        // existence check above compares against. Stripping a trailing extension
+        // here would make every second call create another file (providers rename
+        // duplicates), silently stacking files like "DO_NOT_DELETE (1)".
+        val fileName = fileNameAndExtension
 
         var failSuccess = false
         var outputStream: OutputStream? = null

@@ -36,6 +36,32 @@ internal fun isSyncthingInternalName(name: String): Boolean {
 }
 
 /**
+ * Recursive snapshot of a forwarded directory, RELATIVE paths -> [SafBridge.NodeInfo].
+ * Syncthing-internal names are skipped. Shared by the per-bridge scan and the
+ * stale-snapshot guards in [SafBridge.register]/[SafBridge.startAll].
+ */
+private fun scanForwardedDir(dir: File): Map<String, SafBridge.NodeInfo> {
+    val result = LinkedHashMap<String, SafBridge.NodeInfo>()
+    fun walk(dir: File, prefix: String) {
+        val entries = dir.listFiles() ?: return
+        for (entry in entries) {
+            if (isSyncthingInternalName(entry.name)) {
+                continue
+            }
+            val path = if (prefix.isEmpty()) entry.name else "$prefix/${entry.name}"
+            if (entry.isDirectory) {
+                result[path] = SafBridge.NodeInfo(isDir = true)
+                walk(entry, path)
+            } else {
+                result[path] = SafBridge.NodeInfo(isDir = false, size = entry.length(), mtime = entry.lastModified())
+            }
+        }
+    }
+    walk(dir, "")
+    return result
+}
+
+/**
  * Forwards "special" folders that have no real filesystem path (DocumentsProvider
  * roots exposed by other apps, e.g. fcitx5-android's data root) into the Syncthing
  * core.
@@ -158,6 +184,35 @@ class SafBridge(private val context: Context) {
     }
 
     /**
+     * True while the persisted snapshot for [stateKey] still matches the current
+     * forwarded directory, i.e. mirroring may safely continue where it left off.
+     *
+     * False when the forwarded dir is missing or no longer holds paths the
+     * snapshot records. Such a stale snapshot must be dropped BEFORE the next
+     * pass, otherwise the empty forwarded dir is read as "everything was deleted"
+     * and those deletions are propagated INTO the provider (wiping the user's
+     * data; ".stfolder"-style internal names are filtered and would survive).
+     *
+     * A snapshot can go stale without being cleared: a forward pass that was
+     * still in flight when the folder was removed re-persists its snapshot after
+     * unregister cleared the prefs, a crash can interrupt unregister between the
+     * pref removal and the directory delete, or a config import can restore a
+     * snapshot for a wiped directory.
+     */
+    private fun snapshotMatchesForwardedDir(folderPath: String, stateKey: String): Boolean {
+        val state = loadState(stateKey)
+        if (state.isEmpty()) {
+            return true
+        }
+        val dir = File(folderPath)
+        if (!dir.isDirectory) {
+            return false
+        }
+        val present = scanForwardedDir(dir)
+        return state.keys.all { present.containsKey(it) }
+    }
+
+    /**
      * Registers a bridge for [uri] (idempotent) and returns the forwarded folder
      * path that must be stored as folder.path in the Syncthing config.
      */
@@ -170,6 +225,15 @@ class SafBridge(private val context: Context) {
         }
         synchronized(bridges) {
             if (!bridges.containsKey(folderPath)) {
+                // Re-adding a folder whose forwarded dir is gone/emptied while a
+                // stale snapshot survived (e.g. an in-flight pass re-persisted it
+                // after the folder removal): diffing against it would read the
+                // empty dir as deletions and wipe the provider. Start from a clean
+                // snapshot so the provider content is PULLED instead.
+                if (!snapshotMatchesForwardedDir(folderPath, hashOf(uri))) {
+                    Log.i(TAG, "register: Stale snapshot for [$folderPath], dropping it")
+                    prefs.edit().remove(PREF_STATE_PREFIX + hashOf(uri)).commit()
+                }
                 bridges[folderPath] = Bridge(folderPath, uri)
             }
         }
@@ -248,7 +312,11 @@ class SafBridge(private val context: Context) {
             return
         }
         saveMappings(mappings)
-        prefs.edit().remove(PREF_STATE_PREFIX + hashOf(Uri.parse(uriString))).apply()
+        // commit() (not apply()): an in-flight forward pass may still be running
+        // on this bridge (stop() is cooperative, it does not interrupt the pass)
+        // and any state write it does afterwards must not land AFTER this removal.
+        // The pass itself is additionally gated by Bridge.active, see forwardPass.
+        prefs.edit().remove(PREF_STATE_PREFIX + hashOf(Uri.parse(uriString))).commit()
         File(folderPath).deleteRecursively()
     }
 
@@ -272,10 +340,12 @@ class SafBridge(private val context: Context) {
                 Log.i(TAG, "startAll: Skipping [$folderPath], SAF grant lost; open the folder to re-authorize")
                 continue
             }
-            if (!File(folderPath).isDirectory) {
-                // Fresh forwarded dir (config imported onto a wiped install): start
-                // from an empty snapshot so provider content is PULLED instead of
-                // being diffed against a stale imported snapshot.
+            // Fresh or foreign forwarded dir (config imported onto a wiped install,
+            // crash interrupted a folder removal, ...): start from an empty snapshot
+            // so provider content is PULLED instead of being diffed against a stale
+            // snapshot (which could produce bogus provider deletions).
+            if (!snapshotMatchesForwardedDir(folderPath, hashOf(uri))) {
+                Log.i(TAG, "startAll: Stale snapshot for [$folderPath], dropping it")
                 prefs.edit().remove(PREF_STATE_PREFIX + hashOf(uri)).commit()
             }
             val bridge = Bridge(folderPath, uri)
@@ -304,6 +374,14 @@ class SafBridge(private val context: Context) {
         private var emptySafScans = 0
         private var loop: Job? = null
 
+        /**
+         * Flipped to false by [stop]; a pass that is already running consults it
+         * before persisting the snapshot or nudging the core, so a stopped bridge
+         * can never undo unregister's state cleanup.
+         */
+        @Volatile
+        private var active = true
+
         fun start() {
             if (loop?.isActive == true) {
                 return
@@ -322,6 +400,12 @@ class SafBridge(private val context: Context) {
         }
 
         fun stop() {
+            // Cooperative: the pass currently in flight (if any) is not
+            // interruptible and runs to completion - only the next poll loop
+            // iteration stops. forwardPass consults [active] before persisting
+            // anything so a stopped bridge can never re-write a stale snapshot
+            // (e.g. after unregister cleared it) or nudge the core.
+            active = false
             loop?.cancel()
             loop = null
         }
@@ -331,6 +415,10 @@ class SafBridge(private val context: Context) {
                 return@withContext
             }
             try {
+                if (!active) {
+                    // Stopped between the last poll iteration and this one.
+                    return@withContext
+                }
                 val saf = tree.scan()
                 val fwd = scanForwardedDir(forwardedDir)
                 val last = loadState(stateKey)
@@ -357,6 +445,14 @@ class SafBridge(private val context: Context) {
                 val appliedSaf = applyToSaf(plan)
                 // Only operations that actually succeeded advance the snapshot;
                 // failures are retried next pass (see MirrorMerge.verifiedResult).
+                // Never persist when the bridge was stopped mid-pass (folder
+                // removed): writing now would resurrect the snapshot that
+                // unregister just cleared and turn the next re-add into a
+                // provider-wide deletion.
+                if (!active) {
+                    Log.i(TAG, "forwardPass: [$stateKey] Bridge stopped mid-pass, not persisting state")
+                    return@withContext
+                }
                 saveState(stateKey, MirrorMerge.verifiedResult(plan, appliedFwd, appliedSaf))
                 if (plan.hasWork()) {
                     Log.i(TAG, "forwardPass: [$stateKey] ${plan.summary()}")
@@ -371,31 +467,6 @@ class SafBridge(private val context: Context) {
             } finally {
                 inFlight.set(false)
             }
-        }
-
-        private fun scanForwardedDir(dir: File): Map<String, NodeInfo> {
-            val result = LinkedHashMap<String, NodeInfo>()
-            fun walk(dir: File, prefix: String) {
-                val entries = dir.listFiles() ?: return
-                for (entry in entries) {
-                    if (isSyncthingInternal(entry.name)) {
-                        continue
-                    }
-                    val path = if (prefix.isEmpty()) entry.name else "$prefix/${entry.name}"
-                    if (entry.isDirectory) {
-                        result[path] = NodeInfo(isDir = true)
-                        walk(entry, path)
-                    } else {
-                        result[path] = NodeInfo(isDir = false, size = entry.length(), mtime = entry.lastModified())
-                    }
-                }
-            }
-            walk(dir, "")
-            return result
-        }
-
-        private fun isSyncthingInternal(name: String): Boolean {
-            return isSyncthingInternalName(name)
         }
 
         /**

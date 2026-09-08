@@ -43,7 +43,13 @@ internal fun preCreateFolderStruct(context: Context, uriFolderRoot: Uri?, absolu
 
     val dfFolderMarkerDir = FileUtils.safCreateDirectory(dfFolder, folderMarkerDirName)
     if (dfFolderMarkerDir != null) {
-        FileUtils.safCreateFile(context, dfFolderMarkerDir, doNotDeleteFileName + ".txt", doNotDeleteFileName)
+        // The marker file is extensionless "DO_NOT_DELETE" on both the SAF and the
+        // classic path, and safCreateFile checks existence by the SAME name it
+        // creates under. The old ".txt" spelling checked for "DO_NOT_DELETE.txt"
+        // while actually creating the extension-stripped "DO_NOT_DELETE", so every
+        // folder add stacked another provider-renamed duplicate ("DO_NOT_DELETE (1)",
+        // ...) inside the marker directory.
+        FileUtils.safCreateFile(context, dfFolderMarkerDir, doNotDeleteFileName, doNotDeleteFileName)
     }
     val dfStVersionsDir = FileUtils.safCreateDirectory(dfFolder, Constants.FOLDER_NAME_STVERSIONS)
     if (dfStVersionsDir != null) {
