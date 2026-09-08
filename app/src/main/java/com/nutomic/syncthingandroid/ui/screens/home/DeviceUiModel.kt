@@ -19,6 +19,7 @@ private const val TIMESTAMP_NEVER_SEEN = "1970-01-01T00:00:00Z"
 @androidx.compose.runtime.Immutable
 data class DeviceUiModel(
     val id: String,
+    val group: String,
     val displayName: String,
     val lastSeenText: String,
     val sharedFolderNames: List<String>,
@@ -119,6 +120,7 @@ fun buildDeviceUiModels(
 
             DeviceUiModel(
                 id = device.deviceID,
+                group = device.group,
                 displayName = device.displayName,
                 lastSeenText = lastSeenText,
                 sharedFolderNames = sharedFolderNames,

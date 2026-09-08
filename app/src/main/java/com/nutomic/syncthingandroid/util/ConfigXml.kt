@@ -790,6 +790,7 @@ class ConfigXml(private val context: Context) {
             val device = Device()
             device.compression = getAttributeOrDefault(r, "compression", device.compression)
             device.deviceID = getAttributeOrDefault(r, "id", "")
+            device.group = getAttributeOrDefault(r, "group", device.group)
             device.introducedBy = getAttributeOrDefault(r, "introducedBy", device.introducedBy)
             device.introducer = getAttributeOrDefault(r, "introducer", device.introducer)
             device.name = getAttributeOrDefault(r, "name", device.name)
@@ -883,6 +884,7 @@ class ConfigXml(private val context: Context) {
                 if (device.deviceID == getAttributeOrDefault(r, "id", "")) {
                     // Found device to update.
                     r.setAttribute("compression", device.compression)
+                    r.setAttribute("group", device.group)
                     r.setAttribute("introducedBy", device.introducedBy)
                     r.setAttribute("introducer", device.introducer.toString())
                     r.setAttribute("name", device.name)

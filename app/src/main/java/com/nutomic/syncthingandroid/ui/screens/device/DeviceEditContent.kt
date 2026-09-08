@@ -60,6 +60,7 @@ import com.nutomic.syncthingandroid.model.Device
 import com.nutomic.syncthingandroid.model.DiscoveredDevice
 import com.nutomic.syncthingandroid.ui.components.ClickRow
 import com.nutomic.syncthingandroid.ui.components.FormCard
+import com.nutomic.syncthingandroid.ui.components.GroupPickerRow
 import com.nutomic.syncthingandroid.ui.components.ToggleRow
 
 /**
@@ -269,6 +270,16 @@ private fun DeviceIdentityCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+
+        // ---- Group ----
+        GroupPickerRow(
+            label = stringResource(R.string.device_group_label),
+            currentGroup = device.group,
+            groupOptions = holder.groupOptions,
+            onGroupChanged = { value ->
+                onDeviceMutate { it.group = value }
+            }
         )
 
         // ---- Addresses ----

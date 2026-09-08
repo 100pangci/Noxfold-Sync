@@ -59,6 +59,7 @@ import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
 import com.nutomic.syncthingandroid.ui.nav.LocalResultBus
 import com.nutomic.syncthingandroid.ui.nav.ResultBus
 import com.nutomic.syncthingandroid.util.ConfigRouter
+import com.nutomic.syncthingandroid.util.ConfigXml
 import com.nutomic.syncthingandroid.util.FileUtils
 
 private const val TAG = "FolderEditScreen"
@@ -495,6 +496,15 @@ private suspend fun initFolderEditState(
     preferences: SharedPreferences,
 ) {
     if (holder.folder != null) return
+    // One folder snapshot serves both the edit lookup and the group name
+    // suggestions; loaded off the main thread in either mode. A corrupt
+    // config.xml must not block "create" (the draft does not need it) and
+    // "edit" then simply falls back to its existing "not found" handling.
+    val folderList = try {
+        withContext(Dispatchers.IO) { configRouter.getFolders(api) }
+    } catch (e: ConfigXml.OpenConfigException) {
+        emptyList()
+    }
     if (isCreate) {
         holder.folder = initNewFolder(folderId, folderLabel, receiveEncrypted)
         holder.needsUpdate = true
@@ -505,9 +515,7 @@ private suspend fun initFolderEditState(
         // newer share state (e.g. right after a config import) - updateFolder PUTs
         // the whole folder object, not a diff.
         var found: Folder? = null
-        // Full-config Gson deep copy (or a config.xml DOM parse when the api is down):
-        // keep it off the main thread so the enter transition stays smooth.
-        for (current in withContext(Dispatchers.IO) { configRouter.getFolders(api) }) {
+        for (current in folderList) {
             if (current.id == (folderId ?: "")) {
                 found = current
                 break
@@ -524,6 +532,10 @@ private suspend fun initFolderEditState(
             holder.ignoreListText = list.ignore?.joinToString("\n") ?: ""
         }
     }
+    holder.groupOptions = folderList
+        .mapNotNull { it.group?.trim()?.takeIf { group -> group.isNotEmpty() } }
+        .distinct()
+        .sorted()
     holder.customSyncConditions = if (isCreate) false else preferences.getBoolean(
         Constants.DYN_PREF_OBJECT_CUSTOM_SYNC_CONDITIONS(
             Constants.PREF_OBJECT_PREFIX_FOLDER + holder.folder!!.id

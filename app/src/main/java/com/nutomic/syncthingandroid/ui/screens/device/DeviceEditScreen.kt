@@ -49,6 +49,7 @@ import com.nutomic.syncthingandroid.ui.nav.EditStateStore
 import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
 import com.nutomic.syncthingandroid.util.Compression
 import com.nutomic.syncthingandroid.util.ConfigRouter
+import com.nutomic.syncthingandroid.util.ConfigXml
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -76,6 +77,13 @@ internal class DeviceEditStateHolder {
     var customSyncConditions by mutableStateOf(false)
     var compressionIndex by mutableStateOf(Compression.METADATA.index)
     var deviceIdText by mutableStateOf("")
+
+    /**
+     * Group names currently used by the configured devices, offered as
+     * dropdown suggestions in the group picker. Filled once when the draft
+     * is initialized.
+     */
+    var groupOptions by mutableStateOf<List<String>>(emptyList())
 }
 
 /**
@@ -151,6 +159,16 @@ fun DeviceEditScreen(
         }
         device = d
         syncHolderFromDevice(holder, d, context, isCreate, preferences)
+        // Group name suggestions = the groups of all configured remote
+        // devices; a corrupt config.xml must not block the editor here.
+        holder.groupOptions = try {
+            withContext(Dispatchers.IO) { configRouter.getDevices(api, false) }
+                .mapNotNull { it.group?.trim()?.takeIf(String::isNotEmpty) }
+                .distinct()
+                .sorted()
+        } catch (e: ConfigXml.OpenConfigException) {
+            emptyList()
+        }
     }
 
     var discoveredDevices by remember { mutableStateOf<Map<String, DiscoveredDevice>?>(null) }

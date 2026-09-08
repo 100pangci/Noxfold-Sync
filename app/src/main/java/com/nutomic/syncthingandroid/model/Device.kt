@@ -13,6 +13,8 @@ class Device {
     @JvmField
     var name: String = ""
     @JvmField
+    var group: String = ""
+    @JvmField
     var addresses: List<String>? = null
     @JvmField
     var allowedNetworks: List<String>? = null

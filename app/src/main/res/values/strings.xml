@@ -249,6 +249,13 @@
     <!-- Setting title -->
     <string name="folder_label">Folder Label</string>
 
+    <!-- Folder group (shown in the folder form and as home screen section headers) -->
+    <string name="folder_group_label">Folder Group</string>
+    <string name="folder_group_ungrouped">Ungrouped</string>
+    <string name="folder_group_new_group">New Group</string>
+    <string name="folder_group_new_group_name">Group name</string>
+    <string name="device_group_label">Device Group</string>
+
     <!-- Setting title -->
     <string name="directory">Directory</string>
     <string name="advanced_directory_selection">Advanced Directory Selection</string>
