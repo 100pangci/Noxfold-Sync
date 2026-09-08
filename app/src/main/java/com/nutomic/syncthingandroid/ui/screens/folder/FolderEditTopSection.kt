@@ -72,6 +72,15 @@ internal fun FolderEditTopSection(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
         )
+        com.nutomic.syncthingandroid.ui.components.GroupPickerRow(
+            label = stringResource(R.string.folder_group_label),
+            currentGroup = folder.group,
+            groupOptions = holder.groupOptions,
+            onGroupChanged = { value ->
+                folder.group = value
+                onMarkDirty()
+            }
+        )
         if (isCreate) {
             OutlinedTextField(
                 value = idText,

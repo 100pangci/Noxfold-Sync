@@ -238,6 +238,13 @@
     <!-- Setting title -->
     <string name="folder_label">文件夹标签</string>
 
+    <!-- 文件夹分组（编辑表单 + 主页分区标题） -->
+    <string name="folder_group_label">分组</string>
+    <string name="folder_group_ungrouped">未分组</string>
+    <string name="folder_group_new_group">新建分组</string>
+    <string name="folder_group_new_group_name">分组名称</string>
+    <string name="device_group_label">设备分组</string>
+
     <!-- Setting title -->
     <string name="directory">目录</string>
     <string name="advanced_directory_selection">高级目录选择</string>

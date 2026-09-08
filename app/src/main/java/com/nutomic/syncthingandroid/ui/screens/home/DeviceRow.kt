@@ -20,7 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
-import com.nutomic.syncthingandroid.ui.components.AppCard
 import com.nutomic.syncthingandroid.ui.theme.StatusBadge
 
 /**
@@ -29,25 +28,20 @@ import com.nutomic.syncthingandroid.ui.theme.StatusBadge
 private const val FOLDER_LIST_COLLAPSE_THRESHOLD = 4
 
 /**
- * One device list card (pure renderer; all data is precomputed in
- * [DeviceUiModel]). Tapping the card opens the device settings.
+ * One device row inside a [HomeGroupCard] (pure renderer; all data is
+ * precomputed in [DeviceUiModel]). Tapping the row opens the device settings.
  */
 @Composable
-fun DeviceRow(
+internal fun DeviceRowContent(
     model: DeviceUiModel,
     onEdit: (DeviceUiModel) -> Unit,
 ) {
-    AppCard(
-        onClick = { onEdit(model) },
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clickable { onEdit(model) }
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
             Text(
                 text = model.displayName,
                 style = MaterialTheme.typography.titleMedium,
@@ -121,6 +115,5 @@ fun DeviceRow(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
     }
 }

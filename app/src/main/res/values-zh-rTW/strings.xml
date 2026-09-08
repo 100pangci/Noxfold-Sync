@@ -238,6 +238,13 @@
     <!-- Setting title -->
     <string name="folder_label">資料夾標籤</string>
 
+    <!-- 資料夾群組（編輯表單 + 主頁區段標題） -->
+    <string name="folder_group_label">群組</string>
+    <string name="folder_group_ungrouped">未分組</string>
+    <string name="folder_group_new_group">新增群組</string>
+    <string name="folder_group_new_group_name">群組名稱</string>
+    <string name="device_group_label">裝置群組</string>
+
     <!-- Setting title -->
     <string name="directory">資料夾</string>
     <string name="advanced_directory_selection">進階目錄選擇</string>

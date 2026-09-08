@@ -18,6 +18,7 @@ import com.nutomic.syncthingandroid.util.Util
 @androidx.compose.runtime.Immutable
 data class FolderUiModel(
     val id: String,
+    val group: String,
     val title: String,
     val path: String,
     val typeTag: String,
@@ -199,6 +200,7 @@ fun buildFolderUiModels(
 
         FolderUiModel(
             id = folder.id,
+            group = folder.group,
             title = title,
             path = folder.path,
             typeTag = folder.type,

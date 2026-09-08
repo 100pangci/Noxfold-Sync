@@ -40,8 +40,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -50,9 +53,11 @@ import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.model.Device
 import com.nutomic.syncthingandroid.model.Folder
+import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.appPreferences
 import com.nutomic.syncthingandroid.ui.components.EmptyListHint
 import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
 import com.nutomic.syncthingandroid.ui.theme.AMOLED_CARD_BORDER_ALPHA
@@ -239,6 +244,41 @@ private fun FolderListPage(
         EmptyListHint(stringResource(R.string.folder_list_empty))
         return
     }
+    // Group names are matched with a locale-aware collator so mixed Chinese /
+    // Latin names sort by pinyin order instead of raw code points.
+    val groupComparator = remember {
+        val collator = java.text.Collator.getInstance()
+        collator.strength = java.text.Collator.PRIMARY
+        Comparator<String> { a, b -> collator.compare(a, b) }
+    }
+    val sections = remember(folders, groupComparator) {
+        buildFolderSections(folders, groupComparator)
+    }
+    // Collapsed group names persist across restarts (SharedPreferences), so
+    // the state survives process death and re-polling of the folder list.
+    val prefs = context.appPreferences()
+    var collapsedGroups by remember(prefs) {
+        mutableStateOf(
+            prefs.getStringSet(Constants.PREF_HOME_COLLAPSED_FOLDER_GROUPS, emptySet()).orEmpty()
+        )
+    }
+    fun toggleGroup(groupName: String) {
+        val collapsed = if (groupName in collapsedGroups) {
+            collapsedGroups - groupName
+        } else {
+            collapsedGroups + groupName
+        }
+        collapsedGroups = collapsed
+        // Drop stale entries whose group no longer exists (e.g. the last
+        // folder of the group was deleted or reassigned).
+        val existing = sections.map { it.groupName }.toSet()
+        prefs.edit()
+            .putStringSet(
+                Constants.PREF_HOME_COLLAPSED_FOLDER_GROUPS,
+                collapsed.intersect(existing)
+            )
+            .apply()
+    }
     // Stable callbacks: combined with the FolderUiModel data class equality,
     // rows whose content did not change are skipped while scrolling.
     val onEdit: (FolderUiModel) -> Unit = remember(navigator) {
@@ -270,13 +310,32 @@ private fun FolderListPage(
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
     ) {
-        items(folders, key = { it.id }, contentType = { "folder" }) { model ->
-            FolderRow(
-                model = model,
-                onEdit = onEdit,
-                onOverride = onOverride,
-                onRevert = onRevert,
-            )
+        // One item per group: the whole section is a single card that expands
+        // or collapses inside itself. Adding/removing individual folder items
+        // on toggle (the old design) made the collapse janky, because every
+        // toggle rewrote the LazyColumn item set and forced a full reflow.
+        items(sections, key = { "group:" + it.groupName }) { section ->
+            HomeGroupCard(
+                title = if (section.groupName.isEmpty())
+                    stringResource(R.string.folder_group_ungrouped)
+                else section.groupName,
+                itemCount = section.items.size,
+                expanded = section.groupName !in collapsedGroups,
+                onToggle = { toggleGroup(section.groupName) },
+            ) {
+                GroupRowDivider()
+                section.items.forEachIndexed { index, model ->
+                    FolderRowContent(
+                        model = model,
+                        onEdit = onEdit,
+                        onOverride = onOverride,
+                        onRevert = onRevert,
+                    )
+                    if (index < section.items.lastIndex) {
+                        GroupRowDivider()
+                    }
+                }
+            }
         }
     }
 }
@@ -286,10 +345,41 @@ private fun FolderListPage(
 private fun DeviceListPage(
     devices: List<DeviceUiModel>?,
 ) {
+    val context = LocalContext.current
     val navigator = LocalAppNavigator.current
     if (devices.isNullOrEmpty()) {
         EmptyListHint(stringResource(R.string.no_devices_configured))
         return
+    }
+    // Same locale-aware collator and grouping rules as the folder list.
+    val groupComparator = remember {
+        val collator = java.text.Collator.getInstance()
+        collator.strength = java.text.Collator.PRIMARY
+        Comparator<String> { a, b -> collator.compare(a, b) }
+    }
+    val sections = remember(devices, groupComparator) {
+        buildDeviceSections(devices, groupComparator)
+    }
+    val prefs = context.appPreferences()
+    var collapsedGroups by remember(prefs) {
+        mutableStateOf(
+            prefs.getStringSet(Constants.PREF_HOME_COLLAPSED_DEVICE_GROUPS, emptySet()).orEmpty()
+        )
+    }
+    fun toggleGroup(groupName: String) {
+        val collapsed = if (groupName in collapsedGroups) {
+            collapsedGroups - groupName
+        } else {
+            collapsedGroups + groupName
+        }
+        collapsedGroups = collapsed
+        val existing = sections.map { it.groupName }.toSet()
+        prefs.edit()
+            .putStringSet(
+                Constants.PREF_HOME_COLLAPSED_DEVICE_GROUPS,
+                collapsed.intersect(existing)
+            )
+            .apply()
     }
     val onEdit: (DeviceUiModel) -> Unit = remember(navigator) {
         { model -> navigator.openDeviceEdit(model.id, false) }
@@ -300,13 +390,45 @@ private fun DeviceListPage(
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
     ) {
-        items(devices, key = { it.id }, contentType = { "device" }) { model ->
-            DeviceRow(
-                model = model,
-                onEdit = onEdit,
-            )
+        items(sections, key = { "dgroup:" + it.groupName }) { section ->
+            HomeGroupCard(
+                title = if (section.groupName.isEmpty())
+                    stringResource(R.string.folder_group_ungrouped)
+                else section.groupName,
+                itemCount = section.items.size,
+                expanded = section.groupName !in collapsedGroups,
+                onToggle = { toggleGroup(section.groupName) },
+            ) {
+                GroupRowDivider()
+                section.items.forEachIndexed { index, model ->
+                    DeviceRowContent(
+                        model = model,
+                        onEdit = onEdit,
+                    )
+                    if (index < section.items.lastIndex) {
+                        GroupRowDivider()
+                    }
+                }
+            }
         }
     }
+}
+
+/**
+ * Hairline separator used inside the grouped list cards: faint in the AMOLED
+ * theme (matching the card outline), regular outlineVariant otherwise.
+ */
+@Composable
+private fun GroupRowDivider() {
+    val dividerColor = if (LocalAmoledTheme.current) {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = AMOLED_CARD_BORDER_ALPHA)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+    HorizontalDivider(
+        color = dividerColor,
+        modifier = Modifier.padding(horizontal = 16.dp)
+    )
 }
 
 /**

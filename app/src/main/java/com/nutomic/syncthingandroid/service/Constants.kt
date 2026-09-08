@@ -75,6 +75,10 @@ object Constants {
     // Preferences: Recent Changes screen
     const val PREF_SHOW_EXACT_TIMES            = "recent_changes_show_exact_times"
 
+    // Preferences - Home screen
+    const val PREF_HOME_COLLAPSED_FOLDER_GROUPS = "home_collapsed_folder_groups"
+    const val PREF_HOME_COLLAPSED_DEVICE_GROUPS = "home_collapsed_device_groups"
+
     fun DYN_PREF_OBJECT_CUSTOM_SYNC_CONDITIONS(objectPrefixAndId: String): String {
         return objectPrefixAndId + "_" + "custom_sync_conditions"
     }

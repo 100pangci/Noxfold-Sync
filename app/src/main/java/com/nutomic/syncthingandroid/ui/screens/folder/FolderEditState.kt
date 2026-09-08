@@ -24,6 +24,13 @@ internal class FolderEditStateHolder {
     var runScript by mutableStateOf(false)
 
     /**
+     * Group names currently used by the configured folders, offered as
+     * dropdown suggestions in the group picker. Filled once when the draft
+     * is initialized.
+     */
+    var groupOptions by mutableStateOf<List<String>>(emptyList())
+
+    /**
      * Bumped whenever the folder model is changed from a dialog (type, pull
      * order, versioning). Sections reading the Java model directly are keyed
      * on this so they recompose reliably.
