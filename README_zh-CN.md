@@ -8,18 +8,13 @@
 
 [Syncthing](https://github.com/syncthing/syncthing) 的 Android 封装。Syncthing 核心以 Go 编写，打包为 `libsyncthingnative.so`、由前台服务以子进程方式拉起运行，上层提供原生 Android 界面，无需 ROOT 即可在多台设备间私密、去中心化地同步文件。
 
-<div align="center">
-  <p>
-    <img src="docs/screenshots/noxfold-status-light.jpg" alt="Light status screen" width="150" />
-    <img src="docs/screenshots/noxfold-devices-light-redacted.jpg" alt="Light devices screen" width="150" />
-    <img src="docs/screenshots/noxfold-folders-light.jpg" alt="Light folders screen" width="150" />
-  </p>
-  <p>
-    <img src="docs/screenshots/noxfold-status-dark.jpg" alt="Dark status screen" width="150" />
-    <img src="docs/screenshots/noxfold-devices-dark-redacted.jpg" alt="Dark devices screen" width="150" />
-    <img src="docs/screenshots/noxfold-folders-dark.jpg" alt="Dark folders screen" width="150" />
-  </p>
-</div>
+## Showcase
+
+<p align="center">
+  <img src="docs/screenshots/noxfold-showcase-status.jpg" alt="Status screen showcase" width="31%" />
+  <img src="docs/screenshots/noxfold-showcase-devices.jpg" alt="Devices screen showcase" width="31%" />
+  <img src="docs/screenshots/noxfold-showcase-folders.jpg" alt="Folders screen showcase" width="31%" />
+</p>
 
 ## 本 Fork 的改动
 

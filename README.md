@@ -8,18 +8,13 @@ English | [简体中文](README_zh-CN.md)
 
 An Android wrapper for [Syncthing](https://github.com/syncthing/syncthing). The Syncthing core, written in Go, is packaged as `libsyncthingnative.so` and executed as a child process managed by a foreground service, with a native Android UI on top — private, decentralized file syncing across devices, no root required.
 
-<div align="center">
-  <p>
-    <img src="docs/screenshots/noxfold-status-light.jpg" alt="Light status screen" width="150" />
-    <img src="docs/screenshots/noxfold-devices-light-redacted.jpg" alt="Light devices screen" width="150" />
-    <img src="docs/screenshots/noxfold-folders-light.jpg" alt="Light folders screen" width="150" />
-  </p>
-  <p>
-    <img src="docs/screenshots/noxfold-status-dark.jpg" alt="Dark status screen" width="150" />
-    <img src="docs/screenshots/noxfold-devices-dark-redacted.jpg" alt="Dark devices screen" width="150" />
-    <img src="docs/screenshots/noxfold-folders-dark.jpg" alt="Dark folders screen" width="150" />
-  </p>
-</div>
+## Showcase
+
+<p align="center">
+  <img src="docs/screenshots/noxfold-showcase-status.jpg" alt="Status screen showcase" width="31%" />
+  <img src="docs/screenshots/noxfold-showcase-devices.jpg" alt="Devices screen showcase" width="31%" />
+  <img src="docs/screenshots/noxfold-showcase-folders.jpg" alt="Folders screen showcase" width="31%" />
+</p>
 
 ## Changes in this Fork
 
