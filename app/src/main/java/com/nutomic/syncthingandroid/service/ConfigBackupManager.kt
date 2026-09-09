@@ -191,56 +191,63 @@ class ConfigBackupManager(private val service: SyncthingService,
         // Shutdown SyncthingNative.
         var failSuccess = true
         Log.d(TAG, "importConfig BEGIN")
-        if (service.currentState != State.DISABLED) {
-            // Synchronous shutdown on this background thread: the backup must only read
-            // files after the binary has fully exited.
-            service.shutdownToStateBlocking(State.DISABLED)
-        }
-
-        // Remove database folder if it exists.
-        val databasePath = Constants.getIndexDbFolder(service)
-        if (databasePath.exists()) {
-            Log.d(TAG, "importConfig: Clearing index database")
-            try {
-                FileUtils.deleteDirectoryRecursively(databasePath)
-            } catch (e: IOException) {
-                Log.e(TAG, "Failed to delete directory '" + databasePath.absolutePath + "'" + e)
-            }
-        }
-
-        // Decompress zip file.
+        val safBridgesWereStarted = service.pauseSafBridgesForConfigImport()
         try {
-            zipFile.extractAll(service.filesDir.absolutePath)
-        } catch (e: ZipException) {
-            Log.e(TAG, "importConfig: Failed to extract zip, " + e.message)
-            failSuccess = false
-        }
+            if (service.currentState != State.DISABLED) {
+                // Synchronous shutdown on this background thread: the backup must only read
+                // files after the binary has fully exited.
+                service.shutdownToStateBlocking(State.DISABLED)
+            }
 
-        // Check if necessary files are present after extraction.
-        val checkPaths = listOf(
-            Constants.getConfigFile(service),
+            // Remove database folder if it exists.
+            val databasePath = Constants.getIndexDbFolder(service)
+            if (databasePath.exists()) {
+                Log.d(TAG, "importConfig: Clearing index database")
+                try {
+                    FileUtils.deleteDirectoryRecursively(databasePath)
+                } catch (e: IOException) {
+                    Log.e(TAG, "Failed to delete directory '" + databasePath.absolutePath + "'" + e)
+                }
+            }
 
-            Constants.getPrivateKeyFile(service),
-            Constants.getPublicKeyFile(service),
-
-            Constants.getHttpsCertFile(service),
-            Constants.getHttpsKeyFile(service),
-
-            Constants.getSharedPrefsFile(service)
-        )
-        for (checkPath in checkPaths) {
-            if (!checkPath.exists()) {
-                Log.e(TAG, "importConfig: Missing file after extraction [" + checkPath.name + "]")
+            // Decompress zip file.
+            try {
+                zipFile.extractAll(service.filesDir.absolutePath)
+            } catch (e: ZipException) {
+                Log.e(TAG, "importConfig: Failed to extract zip, " + e.message)
                 failSuccess = false
             }
-        }
 
-        // Import shared preferences.
-        val sharedPreferencesFile = Constants.getSharedPrefsFile(service)
-        if (sharedPreferencesFile.exists()) {
-            Log.d(TAG, "importConfig: Importing shared preferences")
-            failSuccess = failSuccess && importConfigSharedPrefs(sharedPreferencesFile)
-            sharedPreferencesFile.delete()
+            // Check if necessary files are present after extraction.
+            val checkPaths = listOf(
+                Constants.getConfigFile(service),
+
+                Constants.getPrivateKeyFile(service),
+                Constants.getPublicKeyFile(service),
+
+                Constants.getHttpsCertFile(service),
+                Constants.getHttpsKeyFile(service),
+
+                Constants.getSharedPrefsFile(service)
+            )
+            for (checkPath in checkPaths) {
+                if (!checkPath.exists()) {
+                    Log.e(TAG, "importConfig: Missing file after extraction [" + checkPath.name + "]")
+                    failSuccess = false
+                }
+            }
+
+            // Import shared preferences.
+            val sharedPreferencesFile = Constants.getSharedPrefsFile(service)
+            if (sharedPreferencesFile.exists()) {
+                Log.d(TAG, "importConfig: Importing shared preferences")
+                failSuccess = failSuccess && importConfigSharedPrefs(sharedPreferencesFile)
+                sharedPreferencesFile.delete()
+            }
+        } finally {
+            // The imported mappings and snapshots are now on disk, or the import failed. In
+            // either case no pre-import observer/tree may remain active.
+            service.resumeSafBridgesAfterConfigImport(safBridgesWereStarted)
         }
 
         try {

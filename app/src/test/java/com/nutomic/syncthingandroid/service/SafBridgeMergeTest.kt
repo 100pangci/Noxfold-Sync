@@ -1,5 +1,11 @@
 package com.nutomic.syncthingandroid.service
 
+import android.content.Context
+import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
+
+import java.io.File
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,7 +24,8 @@ class SafBridgeMergeTest {
 
     private fun dir() = SafBridge.NodeInfo(isDir = true)
 
-    private fun file(size: Long, mtime: Long) = SafBridge.NodeInfo(isDir = false, size = size, mtime = mtime)
+    private fun file(size: Long, mtime: Long, hash: String? = null) =
+        SafBridge.NodeInfo(isDir = false, size = size, mtime = mtime, contentHash = hash)
 
     @Test
     fun plan_noopWhenBothSidesMatchSnapshot() {
@@ -132,6 +139,18 @@ class SafBridgeMergeTest {
     }
 
     @Test
+    fun plan_sameSizeAndUnreliableMtimeUsesContentHash() {
+        val last = mapOf("f.bin" to file(4, 0, "old"))
+        val saf = mapOf("f.bin" to file(4, 0, "new"))
+        val fwd = mapOf("f.bin" to file(4, 0, "old"))
+
+        val plan = MirrorMerge.plan(saf, fwd, last)
+
+        assertEquals(listOf("f.bin"), plan.copyToForwarded.map { it.first })
+        assertTrue(plan.copyToSaf.isEmpty())
+    }
+
+    @Test
     fun verifiedResult_dropsFailedCopyDownInsteadOfMistakingItForDeletion() {
         // Regression: a failed provider->forwarded copy must NOT advance the
         // snapshot; otherwise the next pass reads the empty forwarded dir as
@@ -170,6 +189,33 @@ class SafBridgeMergeTest {
     }
 
     @Test
+    fun verifiedResult_withBaseline_retainsFailedDeleteAndRetriesSameDirection() {
+        val last = mapOf("gone.txt" to file(5, 100))
+        val plan = MirrorMerge.plan(emptyMap(), last, last)
+
+        val failed = MirrorMerge.verifiedResult(plan, emptySet(), emptySet(), last)
+        assertEquals(last, failed)
+
+        // The failed forwarded delete must not turn into a new forwarded file that gets
+        // copied back into the provider on the following pass.
+        val retry = MirrorMerge.plan(emptyMap(), last, failed)
+        assertEquals(listOf("gone.txt"), retry.deleteInForwarded)
+        assertTrue(retry.copyToSaf.isEmpty())
+    }
+
+    @Test
+    fun verifiedResult_withBaseline_retainsFailedProviderDelete() {
+        val last = mapOf("gone.txt" to file(5, 100))
+        val plan = MirrorMerge.plan(emptyMap(), emptyMap(), last)
+
+        val failed = MirrorMerge.verifiedResult(plan, emptySet(), emptySet(), last)
+        assertEquals(last, failed)
+
+        val retry = MirrorMerge.plan(emptyMap(), emptyMap(), failed)
+        assertEquals(listOf("gone.txt"), retry.deleteInSaf)
+    }
+
+    @Test
     fun verifiedResult_keepsUntouchedPaths() {
         val state = mapOf(
             "docs" to dir(),
@@ -177,6 +223,39 @@ class SafBridgeMergeTest {
         )
         val plan = MirrorMerge.plan(state, state, state)
         assertEquals(state, MirrorMerge.verifiedResult(plan, emptySet(), emptySet()))
+    }
+
+    @Test
+    fun forwardedScanFailure_isNotAnEmptyTree() {
+        val file = File.createTempFile("saf-bridge", "not-a-directory")
+        try {
+            var failed = false
+            try {
+                scanForwardedDir(file)
+            } catch (_: java.io.IOException) {
+                failed = true
+            }
+            assertTrue("a local scan failure must not become an empty map", failed)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun providerQueryFailure_isNotAnEmptyTree() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val tree = DocumentFileSafTree(
+            context,
+            Uri.parse("content://provider/tree/root"),
+        )
+
+        var failed = false
+        try {
+            tree.scan()
+        } catch (_: java.io.IOException) {
+            failed = true
+        }
+        assertTrue("a provider query failure must not become an empty map", failed)
     }
 
     @Test
