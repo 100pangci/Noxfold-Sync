@@ -1,6 +1,7 @@
 package com.nutomic.syncthingandroid.util
 
 import android.content.Context
+import android.util.Log
 import com.topjohnwu.superuser.Shell
 
 /**
@@ -12,6 +13,8 @@ import com.topjohnwu.superuser.Shell
  * explicit user actions (toggling the setting, browsing folders, starting the core).
  */
 object RootAccess {
+
+    private const val TAG = "RootAccess"
 
     /**
      * Returns true if a root shell could be obtained and granted. On non-rooted devices
@@ -58,6 +61,15 @@ object RootAccess {
             val quoted = "'" + dir.absolutePath.replace("'", "'\\''") + "'"
             if (code("chown -R ${uid}:${uid} $quoted") != 0) {
                 ok = false
+            }
+            // Best-effort SELinux relabel: some su environments (SELinux type transitions in
+            // the root daemon's policy) leave files created by the root-uid core with a type
+            // the app domain cannot read, which ownership alone cannot fix. restorecon reverts
+            // them to the policy default for the path (app_data_file). It is a no-op where the
+            // type is already correct, and failures are ignored: the binary is not present in
+            // every su environment, so it must never fail the ownership handback.
+            if (code("restorecon -R $quoted") != 0) {
+                Log.w(TAG, "handBackStorage: restorecon failed for ${dir.absolutePath} (ignored)")
             }
         }
         return ok

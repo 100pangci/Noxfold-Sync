@@ -197,8 +197,9 @@ class ConfigXml(private val context: Context) {
      * session left them root-owned: syncthing writes config.xml and the key material with
      * explicit 0600 modes (which the launch-time umask cannot influence), and the app's
      * own config IO then fails until ownership is returned. Chowns only this small set of
-     * files through the root shell — instant, no recursive walk over the index database.
-     * Harmless no-op when the files are already app-owned or su is unavailable.
+     * files through the root shell — instant, no recursive walk over the index database —
+     * and best-effort restores their SELinux context. Harmless no-op when the files are
+     * already app-owned or su is unavailable.
      */
     private fun ensureCoreFilesReadable(): Boolean {
         val uid = android.os.Process.myUid()
@@ -219,6 +220,9 @@ class ConfigXml(private val context: Context) {
             if (RootAccess.code("chown ${uid}:${uid} $quoted") != 0) {
                 ok = false
             }
+            // Best-effort SELinux relabel, mirroring handBackStorage: harmless no-op when the
+            // context already matches the policy default, ignored when restorecon is missing.
+            RootAccess.code("restorecon $quoted")
         }
         return ok
     }
