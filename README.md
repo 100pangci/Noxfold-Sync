@@ -3,12 +3,23 @@
 English | [简体中文](README_zh-CN.md)
 
 [![License: MPLv2](https://img.shields.io/badge/License-MPLv2-blue.svg)](https://opensource.org/licenses/MPL-2.0)
-[![Build App](https://github.com/100pangci/syncthing-android/actions/workflows/build-app.yaml/badge.svg)](https://github.com/100pangci/syncthing-android/actions/workflows/build-app.yaml)
-[![Release](https://img.shields.io/github/v/release/100pangci/syncthing-android)](https://github.com/100pangci/syncthing-android/releases/latest)
+[![Build App](https://github.com/100pangci/Noxfold-Sync/actions/workflows/build-app.yaml/badge.svg)](https://github.com/100pangci/Noxfold-Sync/actions/workflows/build-app.yaml)
+[![Release](https://img.shields.io/github/v/release/100pangci/Noxfold-Sync)](https://github.com/100pangci/Noxfold-Sync/releases/latest)
 
 An Android wrapper for [Syncthing](https://github.com/syncthing/syncthing). The Syncthing core, written in Go, is packaged as `libsyncthingnative.so` and executed as a child process managed by a foreground service, with a native Android UI on top — private, decentralized file syncing across devices, no root required.
 
-<img src="app/src/main/play/listings/en-US/graphics/phone-screenshots/1.jpg" alt="Screenshot 1" width="150" /><img src="app/src/main/play/listings/en-US/graphics/phone-screenshots/2.jpg" alt="Screenshot 2" width="150" /><img src="app/src/main/play/listings/en-US/graphics/phone-screenshots/3.jpg" alt="Screenshot 3" width="150" />
+<div align="center">
+  <p>
+    <img src="docs/screenshots/noxfold-status-light.jpg" alt="Light status screen" width="150" />
+    <img src="docs/screenshots/noxfold-devices-light-redacted.jpg" alt="Light devices screen" width="150" />
+    <img src="docs/screenshots/noxfold-folders-light.jpg" alt="Light folders screen" width="150" />
+  </p>
+  <p>
+    <img src="docs/screenshots/noxfold-status-dark.jpg" alt="Dark status screen" width="150" />
+    <img src="docs/screenshots/noxfold-devices-dark-redacted.jpg" alt="Dark devices screen" width="150" />
+    <img src="docs/screenshots/noxfold-folders-dark.jpg" alt="Dark folders screen" width="150" />
+  </p>
+</div>
 
 ## Changes in this Fork
 
@@ -32,7 +43,7 @@ An intensive rewrite on top of [researchxxl/Syncthing-Fork](https://github.com/r
 
 ### Stability & Fixes
 - Migrated the deprecated `CONNECTIVITY_ACTION` receiver to `NetworkCallback`, and split `SyncthingService` responsibilities into dedicated managers (HTTPS cert, config backup)
-- Fixed planned-shutdown SIGKILL (exit code 137) being misreported as a crash, root sessions locking the app out of `config.xml` (0600 root ownership), and stale root cores surviving force-stop; narrowed root `find`/kill scope to this app's sync dirs. See the [release notes](https://github.com/100pangci/syncthing-android/releases) for the full changelog.
+- Fixed planned-shutdown SIGKILL (exit code 137) being misreported as a crash, root sessions locking the app out of `config.xml` (0600 root ownership), and stale root cores surviving force-stop; narrowed root `find`/kill scope to this app's sync dirs. See the [release notes](https://github.com/100pangci/Noxfold-Sync/releases) for the full changelog.
 
 ### Engineering
 - Added Robolectric unit tests for core sync paths (event processing, run conditions, config parsing)
@@ -40,7 +51,7 @@ An intensive rewrite on top of [researchxxl/Syncthing-Fork](https://github.com/r
 
 ## Download
 
-Grab an APK from [Releases](https://github.com/100pangci/syncthing-android/releases/latest), or subscribe via [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2Fsyncthing-android%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Noxfold-Sync%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D).
+Grab an APK from [Releases](https://github.com/100pangci/Noxfold-Sync/releases/latest), or subscribe via [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2FNoxfold-Sync%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Noxfold-Sync%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D).
 
 > The application ID is `com.github.ywpc05.syncthingfork` (debug builds get a `.debug` suffix). It differs from both the official app and the upstream `com.github.catfriend1.syncthingfork`, so it installs side by side and **cannot** upgrade either of them in place. To migrate: export `config.zip` in the old app, install this fork, then import it via Settings → Import & Export. See the [migration guide](wiki/migration/Switching-from-the-deprecated-official-version.md) for the step-by-step flow.
 
@@ -63,7 +74,7 @@ The certificate fingerprint should stay constant across releases. If it ever cha
 
 ```bash
 # 0. Clone with the Syncthing core submodule
-git clone --recurse-submodules https://github.com/100pangci/syncthing-android
+git clone --recurse-submodules https://github.com/100pangci/Noxfold-Sync
 # (already cloned: git submodule update --init --recursive)
 
 # 1. Install prerequisites (SDK / NDK / Go)

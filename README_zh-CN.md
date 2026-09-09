@@ -3,12 +3,23 @@
 [English](README.md) | 简体中文
 
 [![License: MPLv2](https://img.shields.io/badge/License-MPLv2-blue.svg)](https://opensource.org/licenses/MPL-2.0)
-[![Build App](https://github.com/100pangci/syncthing-android/actions/workflows/build-app.yaml/badge.svg)](https://github.com/100pangci/syncthing-android/actions/workflows/build-app.yaml)
-[![Release](https://img.shields.io/github/v/release/100pangci/syncthing-android)](https://github.com/100pangci/syncthing-android/releases/latest)
+[![Build App](https://github.com/100pangci/Noxfold-Sync/actions/workflows/build-app.yaml/badge.svg)](https://github.com/100pangci/Noxfold-Sync/actions/workflows/build-app.yaml)
+[![Release](https://img.shields.io/github/v/release/100pangci/Noxfold-Sync)](https://github.com/100pangci/Noxfold-Sync/releases/latest)
 
 [Syncthing](https://github.com/syncthing/syncthing) 的 Android 封装。Syncthing 核心以 Go 编写，打包为 `libsyncthingnative.so`、由前台服务以子进程方式拉起运行，上层提供原生 Android 界面，无需 ROOT 即可在多台设备间私密、去中心化地同步文件。
 
-<img src="app/src/main/play/listings/en-US/graphics/phone-screenshots/1.jpg" alt="截图 1" width="150" /><img src="app/src/main/play/listings/en-US/graphics/phone-screenshots/2.jpg" alt="截图 2" width="150" /><img src="app/src/main/play/listings/en-US/graphics/phone-screenshots/3.jpg" alt="截图 3" width="150" />
+<div align="center">
+  <p>
+    <img src="docs/screenshots/noxfold-status-light.jpg" alt="Light status screen" width="150" />
+    <img src="docs/screenshots/noxfold-devices-light-redacted.jpg" alt="Light devices screen" width="150" />
+    <img src="docs/screenshots/noxfold-folders-light.jpg" alt="Light folders screen" width="150" />
+  </p>
+  <p>
+    <img src="docs/screenshots/noxfold-status-dark.jpg" alt="Dark status screen" width="150" />
+    <img src="docs/screenshots/noxfold-devices-dark-redacted.jpg" alt="Dark devices screen" width="150" />
+    <img src="docs/screenshots/noxfold-folders-dark.jpg" alt="Dark folders screen" width="150" />
+  </p>
+</div>
 
 ## 本 Fork 的改动
 
@@ -32,7 +43,7 @@
 
 ### 稳定性与修复
 - 废弃的 `CONNECTIVITY_ACTION` 广播接收迁移到 `NetworkCallback`，`SyncthingService` 职责拆分到专职管理器（HTTPS 证书、配置备份）
-- 修复计划内关停的 SIGKILL（退出码 137）被误报为崩溃、root 会话把 `config.xml` 锁成 0600 属主致应用侧无法读写、强停后 root 残留核心等问题；root 下 `find`/kill 范围收窄到本应用同步目录。完整更新日志见 [release notes](https://github.com/100pangci/syncthing-android/releases)。
+- 修复计划内关停的 SIGKILL（退出码 137）被误报为崩溃、root 会话把 `config.xml` 锁成 0600 属主致应用侧无法读写、强停后 root 残留核心等问题；root 下 `find`/kill 范围收窄到本应用同步目录。完整更新日志见 [release notes](https://github.com/100pangci/Noxfold-Sync/releases)。
 
 ### 工程化
 - 为核心同步路径（事件处理、运行条件、配置解析）补充 Robolectric 单元测试
@@ -40,7 +51,7 @@
 
 ## 下载
 
-前往 [Releases](https://github.com/100pangci/syncthing-android/releases/latest) 下载 APK，或使用 [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2Fsyncthing-android%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Noxfold-Sync%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D) 订阅更新。
+前往 [Releases](https://github.com/100pangci/Noxfold-Sync/releases/latest) 下载 APK，或使用 [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2FNoxfold-Sync%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Noxfold-Sync%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D) 订阅更新。
 
 > 应用包名为 `com.github.ywpc05.syncthingfork`（debug 构建带 `.debug` 后缀），与官方版、上游 `com.github.catfriend1.syncthingfork` 均不同，可并存安装，**无法**在它们基础上原地升级。迁移方法：旧应用内导出 `config.zip`，装好本 fork 后在「设置 → 导入导出」中导入。分步流程见[迁移指南](wiki/migration/Switching-from-the-deprecated-official-version.md)。
 
@@ -63,7 +74,7 @@ apksigner verify --print-certs app-*.apk
 
 ```bash
 # 0. 连同 Syncthing 核心子模块一起克隆
-git clone --recurse-submodules https://github.com/100pangci/syncthing-android
+git clone --recurse-submodules https://github.com/100pangci/Noxfold-Sync
 # （已 clone 过：git submodule update --init --recursive）
 
 # 1. 安装 SDK / NDK / Go 等前置依赖
