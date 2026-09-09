@@ -1,30 +1,41 @@
-v2.1.5.0: Syncthing core upgraded from v2.1.3 to the stable v2.1.5 release.
+v2.1.5.1: folder/device grouping on the home screen, a SAF re-authorization card, plus stability fixes for root mode and the SAF bridge.
 
 ## New
-* **Syncthing core pinned to stable v2.1.5**: bundled core upgraded from v2.1.3 — config format (version 52) and REST API unchanged, no app-side code changes required
-* Core v2.1.4: all outgoing HTTP requests now send a User-Agent header (upstream #10867)
-* Core v2.1.5: build / packaging fixes upstream; no functional changes for the Android app
+* **Folder / device grouping**: pick or create a group in the folder/device editor (dropdown + "new group"); the home screen shows one large collapsible card per group with the collapse state remembered, ungrouped items pinned on top
+* **SAF re-authorization card**: folders whose storage access is missing show an amber notice row; tapping re-opens the folder picker and re-authorizes in place (path unchanged) — syncing resumes automatically once granted
+
+## Fixes
+* **Root mode**: storage handed back from a root session is now also relabeled via restorecon — fixes the app/core being unable to read their own config and key files in su environments that leave root-daemon SELinux types behind
+* **SAF bridge**: stale snapshots can no longer wipe forwarded folders
+* **Dialog**: anonymous usage-report text now sits in a small scrollable block
+* **i18n**: complete Slovak plural 'many' forms; declare az/be/ckb/gl in the locale list; escape apostrophes in fr/it group strings; folder/device group, SAF-card and Syncthing Camera strings completed across all locales (zh-CN/zh-TW restored)
 
 ## Notes
-* App UI, SAF bridge and root mode are unchanged since v2.1.3.3
+* Build: the prerequisite tools directory is only created when compiling the Go core from source
 
 ## Known limitations
-* Root mode is experimental: verified on a single Magisk / HyperOS device; KernelSU untested
+* Root mode is experimental: verified on a Magisk / HyperOS device (incl. force-stop recovery); KernelSU untested
 * Implicit broadcasts to AppConfigReceiver are blocked by Android 16 / HyperOS — use explicit broadcasts (see wiki)
 * Dialogs have no predictive-back animation (compose-ui platform gap)
 
 ---
 
-v2.1.5.0：Syncthing 核心由 v2.1.3 升级到稳定版 v2.1.5。
+v2.1.5.1：主页文件夹/设备分组、SAF 重新授权提示卡片，以及 Root 模式与 SAF 桥的稳定性修复。
 
 ## 新增
-* **Syncthing 核心锁定稳定版 v2.1.5**：内置核心由 v2.1.3 升级——配置格式（版本 52）与 REST API 均无变化，无需改动应用代码
-* 核心 v2.1.4：所有外发 HTTP 请求现在都会携带 User-Agent（上游 #10867）
-* 核心 v2.1.5：上游构建 / 打包修复；对 Android 端无功能影响
+* **文件夹 / 设备分组**：编辑页为文件夹/设备选择或新建分组（下拉框 + 加号）；主页每个分组一张大卡片，点组头折叠/展开且状态记忆，未分组条目置顶
+* **SAF 重新授权提示卡片**：存储权限失效的文件夹显示琥珀色提示行，点击直接重开文件夹选择器原位重新授权（路径不变），授权后自动恢复同步
+
+## 修复
+* **Root 模式**：root 会话归还存储时顺带 restorecon 还原 SELinux 上下文——修复部分 su 环境（root 守护进程策略留下 SELinux 类型转换）下应用/核心读不了自己配置与密钥文件的问题（已验证强杀后冷启动自愈）
+* **SAF 桥**：陈旧快照不再误清已转发的文件夹
+* **对话框**：匿名使用统计说明文字改为小块可滚动区域
+* **i18n**：补全斯洛伐克语复数 many 形式；语言列表声明 az/be/ckb/gl；修复 fr/it 分组字符串撇号转义；文件夹/设备分组、SAF 卡片与 Syncthing Camera 字符串全语言补齐（zh-CN/zh-TW 已恢复）
 
 ## 说明
-* 应用界面、SAF 桥接与 Root 模式自 v2.1.3.3 起无改动
+* 构建：仅在从源码编译 Go 核心时才创建工具目录
 
 ## 已知限制
-* Root 模式为实验性：仅在单台 Magisk/HyperOS 设备验证
+* Root 模式为实验性：已在 Magisk / HyperOS 设备验证（含强杀恢复场景）；KernelSU 未测试
 * Android 16/HyperOS 拦截 AppConfigReceiver 隐式广播，请用显式广播（见 wiki）
+* 对话框无返回预测动画（compose-ui 平台缺口）
