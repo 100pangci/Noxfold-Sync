@@ -697,7 +697,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Política de privacidade</string>
-    <string name="privacy_summary">Abra a política de privacidade do syncthing-android, que cobre o uso (se qualquer) de dados pessoais, como a localização.</string>
+    <string name="privacy_summary">Abra a política de privacidade do Noxfold-Sync, que cobre o uso (se qualquer) de dados pessoais, como a localização.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

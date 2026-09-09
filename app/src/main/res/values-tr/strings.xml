@@ -697,7 +697,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Gizlilik İlkesi</string>
-    <string name="privacy_summary">Kişisel verilerin kullanımını (varsa) kapsayan syncthing-android\'in gizlilik ilkesini açın, örn. konum.</string>
+    <string name="privacy_summary">Kişisel verilerin kullanımını (varsa) kapsayan Noxfold-Sync\'in gizlilik ilkesini açın, örn. konum.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

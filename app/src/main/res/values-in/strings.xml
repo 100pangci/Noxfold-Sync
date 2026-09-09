@@ -702,7 +702,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Kebijakan Privasi</string>
-    <string name="privacy_summary">Buka kebijakan privasi syncthing-android, yang mencakup penggunaan (jika ada) data pribadi, mis. lokasi.</string>
+    <string name="privacy_summary">Buka kebijakan privasi Noxfold-Sync, yang mencakup penggunaan (jika ada) data pribadi, mis. lokasi.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

@@ -68,7 +68,7 @@ jobs:
           tag: ${{ github.event.inputs.tag || github.ref_name }}
           artifacts: "./artifacts/*.apk"
           artifactErrorsFailBuild: true
-          name: Syncthing-Fork ${{ github.event.inputs.tag || github.ref_name }}
+          name: Noxfold-Sync ${{ github.event.inputs.tag || github.ref_name }}
           bodyFile: "app/src/main/play/release-notes/en-US/default.txt"
           prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-rc.') }}
           draft: true

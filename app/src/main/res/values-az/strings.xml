@@ -711,7 +711,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Məxfilik Siyasəti</string>
-    <string name="privacy_summary">syncthing-android-in şəxsi məlumatlardan istifadəni (əgər varsa) əhatə edən məxfilik siyasətini açın, məs. məkan.</string>
+    <string name="privacy_summary">Noxfold-Sync-in şəxsi məlumatlardan istifadəni (əgər varsa) əhatə edən məxfilik siyasətini açın, məs. məkan.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

@@ -4,7 +4,7 @@
 
 A Linux VM, for example running Debian, is recommended to build this.
 
-Build SyncthingNative and the Syncthing-Android wrapper using the following commands:
+Build SyncthingNative and the Noxfold-Sync wrapper using the following commands:
 
 ```bash
 #

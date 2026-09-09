@@ -1,4 +1,4 @@
-# Syncthing-Fork (Compose Edition)
+# Noxfold-Sync (Compose Edition)
 
 English | [简体中文](README_zh-CN.md)
 
@@ -40,7 +40,7 @@ An intensive rewrite on top of [researchxxl/Syncthing-Fork](https://github.com/r
 
 ## Download
 
-Grab an APK from [Releases](https://github.com/100pangci/syncthing-android/releases/latest), or subscribe via [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2Fsyncthing-android%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Syncthing-Fork%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D).
+Grab an APK from [Releases](https://github.com/100pangci/syncthing-android/releases/latest), or subscribe via [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2Fsyncthing-android%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Noxfold-Sync%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D).
 
 > The application ID is `com.github.ywpc05.syncthingfork` (debug builds get a `.debug` suffix). It differs from both the official app and the upstream `com.github.catfriend1.syncthingfork`, so it installs side by side and **cannot** upgrade either of them in place. To migrate: export `config.zip` in the old app, install this fork, then import it via Settings → Import & Export. See the [migration guide](wiki/migration/Switching-from-the-deprecated-official-version.md) for the step-by-step flow.
 

@@ -703,7 +703,7 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Zásady ochrany osobných údajov</string>
-    <string name="privacy_summary">Otvoriť zásady ochrany osobných údajov syncthing-android, ktoré pokrývajú používanie (ak existuje) osobných údajov, napr. polohy.</string>
+    <string name="privacy_summary">Otvoriť zásady ochrany osobných údajov Noxfold-Sync, ktoré pokrývajú používanie (ak existuje) osobných údajov, napr. polohy.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

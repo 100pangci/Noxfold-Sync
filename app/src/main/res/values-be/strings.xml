@@ -715,7 +715,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Палітыка прыватнасці</string>
-    <string name="privacy_summary">Адкрыць палітыку прыватнасці syncthing-android, якая ахоплівае выкарыстанне (калі ёсць) персанальных даных, напрыклад, месцазнаходжання.</string>
+    <string name="privacy_summary">Адкрыць палітыку прыватнасці Noxfold-Sync, якая ахоплівае выкарыстанне (калі ёсць) персанальных даных, напрыклад, месцазнаходжання.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

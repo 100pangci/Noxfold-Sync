@@ -16,15 +16,15 @@ Switching is easier than you may think!
     - config.xml
       - Tip: Use the [Material Files app](https://f-droid.org/packages/me.zhanghai.android.files/) to create the zip file.
   - You can remove the original *.pem and *.xml files after creating the `config.zip` file.
-  - Syncthing-Fork will require the `config.zip` to restore your config.
+  - Noxfold-Sync will require the `config.zip` to restore your config.
 
 - Migration
   - Install our [latest release](https://github.com/100pangci/syncthing-android/releases/latest) from GitHub or F-Droid.
-  - Start Syncthing-Fork.
+  - Start Noxfold-Sync.
   - Complete the welcome slides.
-  - In the Syncthing-Fork settings, go to "Import & Export".
+  - In the Noxfold-Sync settings, go to "Import & Export".
     - Import the `config.zip` you created earlier.
-      - 🍀 Don't worry. You will get an error message, but the import worked. That's because some Syncthing-Fork specific stuff wasn't found during the import and doesn't hurt.
+      - 🍀 Don't worry. You will get an error message, but the import worked. That's because some Noxfold-Sync specific stuff wasn't found during the import and doesn't hurt.
     - 🔙 Hit "back" to go back to the "Import & Export" screen.
     - 🗝️ Set a password to protect future config exports.
     - Hit "Export config".
@@ -39,7 +39,7 @@ Switching is easier than you may think!
 
 - Further advice
   - 🐞 You won't be able to open Syncthing's web UI. Instead, you are presented a password prompt.
-    - In the Syncthing-Fork settings, go to "Syncthing options".
+    - In the Noxfold-Sync settings, go to "Syncthing options".
     - Tap the "api key" entry to copy it to the clipboard.
     - Tap the "web UI password" entry and paste the previously copied "api key" as the password.
     - ✅ You have now manually fixed the problem and can enter the web UI again.

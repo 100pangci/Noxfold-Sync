@@ -700,7 +700,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Tietosuojakäytäntö</string>
-    <string name="privacy_summary">Avaa syncthing-androidin tietosuojakäytäntö, joka käsittelee henkilötietojen (esim. sijainnin) käyttöä.</string>
+    <string name="privacy_summary">Avaa Noxfold-Syncin tietosuojakäytäntö, joka käsittelee henkilötietojen (esim. sijainnin) käyttöä.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

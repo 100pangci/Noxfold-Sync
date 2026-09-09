@@ -1,4 +1,4 @@
-# Syncthing-Fork (Compose 版)
+# Noxfold-Sync (Compose 版)
 
 [English](README.md) | 简体中文
 
@@ -40,7 +40,7 @@
 
 ## 下载
 
-前往 [Releases](https://github.com/100pangci/syncthing-android/releases/latest) 下载 APK，或使用 [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2Fsyncthing-android%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Syncthing-Fork%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D) 订阅更新。
+前往 [Releases](https://github.com/100pangci/syncthing-android/releases/latest) 下载 APK，或使用 [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.github.ywpc05.syncthingfork%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2F100pangci%2Fsyncthing-android%22%2C%22author%22%3A%22100pangci%22%2C%22name%22%3A%22Noxfold-Sync%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22verifyLatestTag%5C%22%3Atrue%7D%22%2C%22overrideSource%22%3Anull%7D) 订阅更新。
 
 > 应用包名为 `com.github.ywpc05.syncthingfork`（debug 构建带 `.debug` 后缀），与官方版、上游 `com.github.catfriend1.syncthingfork` 均不同，可并存安装，**无法**在它们基础上原地升级。迁移方法：旧应用内导出 `config.zip`，装好本 fork 后在「设置 → 导入导出」中导入。分步流程见[迁移指南](wiki/migration/Switching-from-the-deprecated-official-version.md)。
 

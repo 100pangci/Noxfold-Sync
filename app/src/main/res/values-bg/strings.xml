@@ -697,7 +697,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Политика за поверителност</string>
-    <string name="privacy_summary">Отворете политиката за поверителност на syncthing-android, която обхваща използването (ако има такова) на лични данни, например местоположение.</string>
+    <string name="privacy_summary">Отворете политиката за поверителност на Noxfold-Sync, която обхваща използването (ако има такова) на лични данни, например местоположение.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

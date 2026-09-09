@@ -705,7 +705,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Πολιτική απορρήτου</string>
-    <string name="privacy_summary">Άνοιγμα της πολιτικής απορρήτου του syncthing-android, η οποία καλύπτει τη χρήση (εάν υπάρχει) προσωπικών δεδομένων, π.χ. τοποθεσίας.</string>
+    <string name="privacy_summary">Άνοιγμα της πολιτικής απορρήτου του Noxfold-Sync, η οποία καλύπτει τη χρήση (εάν υπάρχει) προσωπικών δεδομένων, π.χ. τοποθεσίας.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

@@ -3,7 +3,7 @@ blank_issues_enabled: false
 contact_links:
   - name: ✨ Request a new Feature
     url: https://forum.syncthing.net/
-    about: To share your ideas to improve Syncthing-Fork, enjoy discussing them with the Syncthing Community and file an issue on GitHub when ready.
+    about: To share your ideas to improve Noxfold-Sync, enjoy discussing them with the Syncthing Community and file an issue on GitHub when ready.
 
   - name: 💬 Support Request or Ask a Question
     url: https://forum.syncthing.net/

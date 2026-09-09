@@ -697,7 +697,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">سیاسەتی تایبەتمەندی</string>
-    <string name="privacy_summary">سیاسەتی تایبەتمەندی syncthing-android بکەرەوە، کە بەکارهێنانی داتای کەسی (ئەگەر هەیە) داپۆشێت، وەک شوێن.</string>
+    <string name="privacy_summary">سیاسەتی تایبەتمەندی Noxfold-Sync بکەرەوە، کە بەکارهێنانی داتای کەسی (ئەگەر هەیە) داپۆشێت، وەک شوێن.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

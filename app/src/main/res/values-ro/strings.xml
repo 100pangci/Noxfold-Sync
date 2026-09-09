@@ -697,7 +697,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Politica de confidențialitate</string>
-    <string name="privacy_summary">Deschide Politica de confidențialitate Syncthing, care acoperă utilizarea (dacă există) a datelor cu caracter personal, de ex. locația.</string>
+    <string name="privacy_summary">Deschide Politica de confidențialitate Noxfold-Sync, care acoperă utilizarea (dacă există) a datelor cu caracter personal, de ex. locația.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

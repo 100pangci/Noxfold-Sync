@@ -699,7 +699,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">プライバシーポリシー</string>
-    <string name="privacy_summary">syncthing-android のプライバシーポリシーを開きます。個人データ（例：位置情報）の使用（ある場合）について説明しています。</string>
+    <string name="privacy_summary">Noxfold-Sync のプライバシーポリシーを開きます。個人データ（例：位置情報）の使用（ある場合）について説明しています。</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

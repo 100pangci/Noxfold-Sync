@@ -706,7 +706,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">隱私權政策</string>
-    <string name="privacy_summary">開啟 syncthing-android 的隱私權政策，其中說明個人資料（例如位置）的使用方式（若有）。</string>
+    <string name="privacy_summary">開啟 Noxfold-Sync 的隱私權政策，其中說明個人資料（例如位置）的使用方式（若有）。</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->
@@ -727,7 +727,7 @@
     <string name="syncthing_version_title">Syncthing 版本</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Syncthing 衍生版封装版本</string>
+    <string name="app_version_title">Noxfold-Sync 衍生版封装版本</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Syncthing API 金鑰（點擊複製）</string>

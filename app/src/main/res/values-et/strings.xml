@@ -697,7 +697,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Andmekaitse - ja privaatsusreeglid</string>
-    <string name="privacy_summary">Ava syncthing-androidi privaatsuspoliitika, mis kirjeldab isikuandmete (nt asukohaandmete) kasutamist (kui üldse).</string>
+    <string name="privacy_summary">Ava Noxfold-Synci privaatsuspoliitika, mis kirjeldab isikuandmete (nt asukohaandmete) kasutamist (kui üldse).</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

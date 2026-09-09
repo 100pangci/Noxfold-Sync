@@ -697,14 +697,14 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Política de privacidad</string>
-    <string name="privacy_summary">Abre la política de privacidad de syncthing-android, que describe el tratamiento de los datos personales, si los hubiera, como la ubicación.</string>
+    <string name="privacy_summary">Abre la política de privacidad de Noxfold-Sync, que describe el tratamiento de los datos personales, si los hubiera, como la ubicación.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->
     <string name="report_issue_title">Informar de un problema</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Abre el rastreador de incidencias de Syncthing‑Fork en %1$s</string>
+    <string name="open_issue_tracker_summary">Abre el rastreador de incidencias de Noxfold-Sync en %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>

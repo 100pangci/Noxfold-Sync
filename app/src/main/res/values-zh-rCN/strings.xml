@@ -706,7 +706,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">隐私政策</string>
-    <string name="privacy_summary">打开 syncthing-android 的隐私政策，其中说明了个人数据（如位置信息）的使用方式。</string>
+    <string name="privacy_summary">打开 Noxfold-Sync 的隐私政策，其中说明了个人数据（如位置信息）的使用方式。</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->

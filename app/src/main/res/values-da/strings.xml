@@ -700,7 +700,7 @@
 
     <!-- Menu item linking privacy policy -->
     <string name="privacy_title">Privatlivspolitik</string>
-    <string name="privacy_summary">Åbn syncthing-androids privatlivspolitik, som dækker brugen (hvis nogen) af personlige data, f.eks. placering.</string>
+    <string name="privacy_summary">Åbn Noxfold-Syncs privatlivspolitik, som dækker brugen (hvis nogen) af personlige data, f.eks. placering.</string>
     <string name="privacy_policy_url" translatable="false">https://syncthing.net/android-privacy-policy</string>
 
     <!-- Settings item that opens issue tracker -->
