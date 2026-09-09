@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Avatud, vaba, usaldusväärne ja hajutatud võrgul põhinev failide sünkroonimisrakendus.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Kaamera sünkroonimine</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork\'i kaamera</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync\'i kaamera</string>
     <string name="photo_shoot_intro_welcome_title">Tere tulemast kasutama Syncthingi kaamerat</string>
     <string name="photo_shoot_intro_no_camera">Vabandust, selles nutiseadmes pole kaamerat.</string>
     <string name="photo_shoot_intro_missing_permissions">Jätkamiseks vajame õigust andmeruumi ja kaamera kasutamiseks.</string>
@@ -704,7 +704,7 @@
     <string name="report_issue_title">Teata veast või problemist</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Ava Syncthing-Forki veahaldur aadressil %1$s</string>
+    <string name="open_issue_tracker_summary">Ava Noxfold-Synci veahaldur aadressil %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -718,7 +718,7 @@
     <string name="syncthing_version_title">Syncthingi versioon</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Syncthing-Forki ümbriku versioon</string>
+    <string name="app_version_title">Noxfold-Synci ümbriku versioon</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Syncthingi API võti (klõpsa kopeerimiseks)</string>

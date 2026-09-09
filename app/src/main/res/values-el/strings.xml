@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Μια ανοιχτή, αξιόπιστη και αποκεντρωμένη εφαρμογή συγχρονισμού αρχείων.</string>
 
@@ -62,7 +62,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Συγχρονισμός. Κάμερα</string>
-    <string name="photo_shoot_activity_title">Κάμερα Syncthing-Fork</string>
+    <string name="photo_shoot_activity_title">Κάμερα Noxfold-Sync</string>
     <string name="photo_shoot_intro_welcome_title">Καλώς ήρθατε στην Κάμερα Syncthing</string>
     <string name="photo_shoot_intro_no_camera">Λυπούμαστε, αυτή η συσκευή δεν διαθέτει κάμερα.</string>
     <string name="photo_shoot_intro_missing_permissions">Χρειαζόμαστε άδεια αποθήκευσης και κάμερας για να συνεχίσουμε.</string>
@@ -712,7 +712,7 @@
     <string name="report_issue_title">Αναφορά προβλήματος</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Άνοιγμα του εργαλείου αναφοράς προβλημάτων του Syncthing-Fork στο %1$s</string>
+    <string name="open_issue_tracker_summary">Άνοιγμα του εργαλείου αναφοράς προβλημάτων του Noxfold-Sync στο %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -726,7 +726,7 @@
     <string name="syncthing_version_title">Έκδοση Syncthing</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Έκδοση Syncthing-Fork Wrapper</string>
+    <string name="app_version_title">Έκδοση Noxfold-Sync Wrapper</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Κλειδί API Syncthing (πατήστε για αντιγραφή)</string>

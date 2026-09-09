@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">オープンで、信頼できる、分散型ファイル同期アプリケーション。</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">カメラを同期する</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork カメラ</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync カメラ</string>
     <string name="photo_shoot_intro_welcome_title">Syncthing Cameraにようこそ</string>
     <string name="photo_shoot_intro_no_camera">このデバイスにはカメラはありません。</string>
     <string name="photo_shoot_intro_missing_permissions">続けるにはストレージとカメラの権限が必要です。</string>
@@ -706,7 +706,7 @@
     <string name="report_issue_title">問題を報告</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">%1$s で Syncthing-Fork のイシュートラッカーを開く</string>
+    <string name="open_issue_tracker_summary">%1$s で Noxfold-Sync のイシュートラッカーを開く</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -720,7 +720,7 @@
     <string name="syncthing_version_title">Syncthing バージョン</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Syncthing-Fork ラッパー バージョン</string>
+    <string name="app_version_title">Noxfold-Sync ラッパー バージョン</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Syncthing API キー (クリックでコピー)</string>

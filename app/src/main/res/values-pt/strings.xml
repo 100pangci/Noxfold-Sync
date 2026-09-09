@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Uma aplicação de sincronização de ficheiros aberta, fiável e descentralizada.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sync. Camera</string>
-    <string name="photo_shoot_activity_title">Câmara Syncthing-Fork</string>
+    <string name="photo_shoot_activity_title">Câmara Noxfold-Sync</string>
     <string name="photo_shoot_intro_welcome_title">Bem-vindo ao Câmara Syncthing</string>
     <string name="photo_shoot_intro_no_camera">Desculpe, este dispositivo não tem uma câmara.</string>
     <string name="photo_shoot_intro_missing_permissions">Requeremos permissão ao armazenamento e a câmara para continuar.</string>
@@ -720,7 +720,7 @@
     <string name="syncthing_version_title">Versão do</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Versão do wrapper do Syncthing-Fork</string>
+    <string name="app_version_title">Versão do wrapper do Noxfold-Sync</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Chave de API do Syncthing (clique para copiar)</string>

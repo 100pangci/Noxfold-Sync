@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Открытое, надёжное и децентрализованное приложение для синхронизации файлов.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sync. Камера</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork Камера</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync Камера</string>
     <string name="photo_shoot_intro_welcome_title">Добро пожаловать в Syncthing Камера</string>
     <string name="photo_shoot_intro_no_camera">Извините, у этого устройства нет камеры.</string>
     <string name="photo_shoot_intro_missing_permissions">Для продолжения требуется доступ к файлам и камере.</string>
@@ -704,7 +704,7 @@
     <string name="report_issue_title">Сообщить о проблеме</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Открыть трекер задач Syncthing-Fork в %1$s</string>
+    <string name="open_issue_tracker_summary">Открыть трекер задач Noxfold-Sync в %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -718,7 +718,7 @@
     <string name="syncthing_version_title">Версия ядра</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Версия Syncthing-Fork</string>
+    <string name="app_version_title">Версия Noxfold-Sync</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Ключ API Syncthing (нажмите, чтобы скопировать)</string>

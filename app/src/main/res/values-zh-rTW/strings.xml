@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing 衍生版</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">一個開放、可靠、去中心化的檔案同步應用程式。</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">同步相機</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork 相機</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync 相機</string>
     <string name="photo_shoot_intro_welcome_title">歡迎使用 Syncthing 相機</string>
     <string name="photo_shoot_intro_no_camera">抱歉，這台設備並無相機。</string>
     <string name="photo_shoot_intro_missing_permissions">我們需要儲存與相機權限才能前往下一步。</string>
@@ -713,7 +713,7 @@
     <string name="report_issue_title">回報問題</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">開啟位於 %1$s 的 Syncthing-Fork 問題追蹤頁面</string>
+    <string name="open_issue_tracker_summary">開啟位於 %1$s 的 Noxfold-Sync 問題追蹤頁面</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>

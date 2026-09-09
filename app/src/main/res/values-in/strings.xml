@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Fork-Syncthing</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Aplikasi penyinkron berkas yang terbuka, tepercaya, dan terdesentralisasi.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sink. Kamera</string>
-    <string name="photo_shoot_activity_title">Kamera Fork-Syncthing</string>
+    <string name="photo_shoot_activity_title">Kamera Noxfold-Sync</string>
     <string name="photo_shoot_intro_welcome_title">Selamat datang di Kamera Syncthing</string>
     <string name="photo_shoot_intro_no_camera">Mohon maaf, perangkat ini tidak memiliki kamera.</string>
     <string name="photo_shoot_intro_missing_permissions">Aplikasi ini memerlukan izin penyimpanan dan izin kamera agar dapat digunakan.</string>
@@ -709,7 +709,7 @@
     <string name="report_issue_title">Laporkan Masalah</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Buka pelacak masalah Syncthing-Fork di %1$s</string>
+    <string name="open_issue_tracker_summary">Buka pelacak masalah Noxfold-Sync di %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -723,7 +723,7 @@
     <string name="syncthing_version_title">Versi Syncthing</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Versi Wrapper Syncthing-Fork</string>
+    <string name="app_version_title">Versi Wrapper Noxfold-Sync</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Kunci API Syncthing (klik untuk menyalin)</string>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Açık, güvenilir ve merkezi olmayan bir dosya eşitleme uygulaması.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sync. Kamera</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork Kamera</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync Kamera</string>
     <string name="photo_shoot_intro_welcome_title">Syncthing Kamera\'ya Hoş Geldiniz</string>
     <string name="photo_shoot_intro_no_camera">Üzgünüz, bu cihazın kamerası yok.</string>
     <string name="photo_shoot_intro_missing_permissions">Devam etmek için depolama ve kamera iznine ihtiyacımız var.</string>
@@ -704,7 +704,7 @@
     <string name="report_issue_title">Sorun Bildir</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">%1$s adresinde Syncthing-Fork sorun izleyicisini açın</string>
+    <string name="open_issue_tracker_summary">%1$s adresinde Noxfold-Sync sorun izleyicisini açın</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -718,7 +718,7 @@
     <string name="syncthing_version_title">Syncthing Sürümü</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Syncthing-Fork Sarmalayıcı Sürümü</string>
+    <string name="app_version_title">Noxfold-Sync Sarmalayıcı Sürümü</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Syncthing API Anahtarı (kopyalamak için dokunun)</string>

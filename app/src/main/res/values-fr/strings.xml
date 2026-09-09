@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Une application ouverte, fiable et décentralisée pour synchroniser des fichiers.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Synchro Appareil Photo</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork Appareil photo</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync Appareil photo</string>
     <string name="photo_shoot_intro_welcome_title">Bienvenue dans Syncthing Appareil photo</string>
     <string name="photo_shoot_intro_no_camera">Désolé, cet appareil n\'a pas d\'appareil photo.</string>
     <string name="photo_shoot_intro_missing_permissions">Il faut la permission d\'accès au stockage et à l\'appareil photo.</string>
@@ -704,7 +704,7 @@
     <string name="report_issue_title">Signaler un problème</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Ouvrir le traceur de bugs de Syncthing-Fork sur %1$s</string>
+    <string name="open_issue_tracker_summary">Ouvrir le traceur de bugs de Noxfold-Sync sur %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -718,7 +718,7 @@
     <string name="syncthing_version_title">Version de Syncthing</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Version du fournisseur Syncthing-Fork</string>
+    <string name="app_version_title">Version du fournisseur Noxfold-Sync</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Clé d\'API (Cliquer pour copier)</string>

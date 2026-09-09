@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Avoin, luotettava ja hajautettu tiedostojensynkronointisovellus.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sync. Kamera</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork Kamera</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync Kamera</string>
     <string name="photo_shoot_intro_welcome_title">Tervetuloa Syncthing Kameraan</string>
     <string name="photo_shoot_intro_no_camera">Pahoittelut, tässä laitteessa ei ole kameraa.</string>
     <string name="photo_shoot_intro_missing_permissions">Tarvitsemme tallennustilan ja kameran käyttöoikeudet jatkaaksemme.</string>
@@ -707,7 +707,7 @@
     <string name="report_issue_title">Ilmoita ongelmasta</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Avaa Syncthing-Forkin ongelmaseuranta osoitteessa %1$s</string>
+    <string name="open_issue_tracker_summary">Avaa Noxfold-Syncin ongelmaseuranta osoitteessa %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -721,7 +721,7 @@
     <string name="syncthing_version_title">Syncthingin versio</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Syncthing-Fork-wrapperin versio</string>
+    <string name="app_version_title">Noxfold-Sync-wrapperin versio</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Syncthingin API-avain (napauta kopioidaksesi)</string>

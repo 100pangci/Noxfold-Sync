@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">开放且值得信赖的去中心化文件同步应用程序。</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sync. 相机</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork 相机</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync 相机</string>
     <string name="photo_shoot_intro_welcome_title">欢迎使用 Syncthing 相机</string>
     <string name="photo_shoot_intro_no_camera">抱歉，此设备没有相机。</string>
     <string name="photo_shoot_intro_missing_permissions">我们需要存储和相机权限才能继续。</string>
@@ -713,7 +713,7 @@
     <string name="report_issue_title">报告问题</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">打开位于 %1$s 的 Syncthing-Fork 问题跟踪页</string>
+    <string name="open_issue_tracker_summary">打开位于 %1$s 的 Noxfold-Sync 问题跟踪页</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -727,7 +727,7 @@
     <string name="syncthing_version_title">Syncthing 版本</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Syncthing-Fork 版本</string>
+    <string name="app_version_title">Noxfold-Sync 版本</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Syncthing API 密钥（点击复制）</string>

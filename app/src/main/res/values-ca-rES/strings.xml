@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Una aplicació de sincronització de fitxers oberta, confiable i descentralitzada.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sincronitza. Càmera</string>
-    <string name="photo_shoot_activity_title">Càmera de Syncthing-Fork</string>
+    <string name="photo_shoot_activity_title">Càmera de Noxfold-Sync</string>
     <string name="photo_shoot_intro_welcome_title">Benvingut/da a Synchroning Camera</string>
     <string name="photo_shoot_intro_no_camera">Ho sento, aquest dispositiu no té càmera.</string>
     <string name="photo_shoot_intro_missing_permissions">Necessitem permís d\'emmagatzematge i de càmera per continuar.</string>
@@ -704,7 +704,7 @@
     <string name="report_issue_title">Informeu d\'un problema</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Obre el rastrejador d\'incidències de Syncthing-Fork a %1$s</string>
+    <string name="open_issue_tracker_summary">Obre el rastrejador d\'incidències de Noxfold-Sync a %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -718,7 +718,7 @@
     <string name="syncthing_version_title">Versió del Syncthing</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Versió de l\'embolcall del Syncthing-Fork</string>
+    <string name="app_version_title">Versió de l\'embolcall del Noxfold-Sync</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Clau d\'API del Syncthing (feu clic per copiar)</string>

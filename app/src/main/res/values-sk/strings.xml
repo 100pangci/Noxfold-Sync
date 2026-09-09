@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">Otvorená, dôveryhodná a decentralizovaná aplikácia pre synchronizáciu súborov.</string>
 
@@ -62,7 +62,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">Sync. Fotoaparát</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork Fotoaparát</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync Fotoaparát</string>
     <string name="photo_shoot_intro_welcome_title">Vitajte v aplikácii Syncthing Camera</string>
     <string name="photo_shoot_intro_no_camera">Ospravedlňujeme sa, toto zariadenie nemá fotoaparát.</string>
     <string name="photo_shoot_intro_missing_permissions">Na pokračovanie potrebujeme povolenia na úložisko a fotoaparát.</string>
@@ -710,7 +710,7 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
     <string name="report_issue_title">Nahlásiť problém</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">Otvoriť sledovač problémov Syncthing-Fork na adrese %1$s</string>
+    <string name="open_issue_tracker_summary">Otvoriť sledovač problémov Noxfold-Sync na adrese %1$s</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -724,7 +724,7 @@ IGNOROVAŤ PODMIENKY SPUSTENIA</string>
     <string name="syncthing_version_title">Verzia Syncthing</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Verzia obaľovača Syncthing-Fork</string>
+    <string name="app_version_title">Verzia obaľovača Noxfold-Sync</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Kľúč API Syncthing (kliknutím skopírujete)</string>

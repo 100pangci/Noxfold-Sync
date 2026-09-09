@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="app_name">Syncthing-Fork</string>
+    <string name="app_name">Noxfold-Sync</string>
 
     <string name="app_description">개방적이고 신뢰할 수 있는 분산형 파일 동기화 응용프로그램.</string>
 
@@ -60,7 +60,7 @@
     <!-- PhotoShootActivity -->
 
     <string name="photo_shoot_launcher_title">카메라 동기화</string>
-    <string name="photo_shoot_activity_title">Syncthing-Fork 카메라</string>
+    <string name="photo_shoot_activity_title">Noxfold-Sync 카메라</string>
     <string name="photo_shoot_intro_welcome_title">Syncthing 카메라에 오신것을 환영합니다</string>
     <string name="photo_shoot_intro_no_camera">죄송합니다, 이 기기에는 카메라가 없습니다.</string>
     <string name="photo_shoot_intro_missing_permissions">계속하려면 저장소 및 카메라 권한이 필요합니다.</string>
@@ -704,7 +704,7 @@
     <string name="report_issue_title">문제 보고</string>
 
     <!-- Summary for the issue tracker settings item -->
-    <string name="open_issue_tracker_summary">%1$s에서 Syncthing-Fork 이슈 트래커를 엽니다</string>
+    <string name="open_issue_tracker_summary">%1$s에서 Noxfold-Sync 이슈 트래커를 엽니다</string>
 
     <!-- URL of the issue tracker -->
     <string name="issue_tracker_url" translatable="false">https://github.com/100pangci/syncthing-android/issues</string>
@@ -718,7 +718,7 @@
     <string name="syncthing_version_title">Syncthing 버전</string>
 
     <!-- Title of the preference showing this app's version name -->
-    <string name="app_version_title">Syncthing-Fork 래퍼 버전</string>
+    <string name="app_version_title">Noxfold-Sync 래퍼 버전</string>
 
     <!-- Title of the preference showing the REST API key -->
     <string name="syncthing_api_key">Syncthing API 키 (클릭하여 복사)</string>
