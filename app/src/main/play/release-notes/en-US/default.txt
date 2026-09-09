@@ -14,7 +14,7 @@ v2.1.5.1: folder/device grouping on the home screen, a SAF re-authorization card
 * Build: the prerequisite tools directory is only created when compiling the Go core from source
 
 ## Known limitations
-* Root mode is experimental: verified on a Magisk / HyperOS device (incl. force-stop recovery); KernelSU untested
+* Root mode: verified on a Magisk / HyperOS device (incl. force-stop recovery); KernelSU untested
 * Implicit broadcasts to AppConfigReceiver are blocked by Android 16 / HyperOS — use explicit broadcasts (see wiki)
 
 ---
@@ -35,5 +35,5 @@ v2.1.5.1：主页文件夹/设备分组、SAF 重新授权提示卡片，以及 
 * 构建：仅在从源码编译 Go 核心时才创建工具目录
 
 ## 已知限制
-* Root 模式为实验性：已在 Magisk / HyperOS 设备验证（含强杀恢复场景）；KernelSU 未测试
+* Root 模式：已在 Magisk / HyperOS 设备验证（含强杀恢复场景）；KernelSU 未测试
 * Android 16/HyperOS 拦截 AppConfigReceiver 隐式广播，请用显式广播（见 wiki）
