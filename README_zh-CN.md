@@ -1,4 +1,4 @@
-# Noxfold-Sync (Compose 版)
+# Noxfold-Sync
 
 [English](README.md) | 简体中文
 
