@@ -7,9 +7,13 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
@@ -19,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.layout.NestedPrefetchScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 
@@ -41,6 +46,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -52,8 +59,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -66,7 +75,9 @@ import com.nutomic.syncthingandroid.service.SafBridge
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.TABLET_MIN_WIDTH_DP
 import com.nutomic.syncthingandroid.ui.appPreferences
+import com.nutomic.syncthingandroid.ui.contentWidthForTablet
 import com.nutomic.syncthingandroid.ui.components.EmptyListHint
 import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
 import com.nutomic.syncthingandroid.ui.theme.AMOLED_CARD_BORDER_ALPHA
@@ -115,13 +126,18 @@ fun HomeScreen(
     val folders = LocalHomeFolderModels.current
     val devices = LocalHomeDeviceModels.current
     val isAmoled = LocalAmoledTheme.current
+    val isTablet = LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP
 
     val drawerState = rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = TAB_FOLDERS, pageCount = { 3 })
+    val selectPage: (Int) -> Unit = { page ->
+        scope.launch { pagerState.animateScrollToPage(page) }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = !isTablet,
         drawerContent = {
             AppDrawer(
                 stServiceRunning = serviceState == SyncthingService.State.ACTIVE,
@@ -135,29 +151,78 @@ fun HomeScreen(
             )
         }
     ) {
-        Scaffold(
+        val homeContent: @Composable () -> Unit = {
+            HomeScaffold(
+                isTablet = isTablet,
+                pagerState = pagerState,
+                onOpenDrawer = { scope.launch { drawerState.open() } },
+                onPageSelected = selectPage,
+                onRefresh = {
+                    if (api != null && apiConfigLoaded) {
+                        api.rescanAll()
+                    }
+                },
+                onSettings = { navigator.openSettings() },
+                onAddFolder = { navigator.openFolderEdit(null, true) },
+                onAddDevice = { navigator.openDeviceEdit(null, true) },
+                folders = folders,
+                devices = devices,
+                serviceState = serviceState,
+                isAmoled = isAmoled,
+            )
+        }
+        if (isTablet) {
+            Row(Modifier.fillMaxSize()) {
+                TabletHomeNavigationRail(
+                    currentPage = pagerState.currentPage,
+                    onPageSelected = selectPage,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                )
+                homeContent()
+            }
+        } else {
+            homeContent()
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun HomeScaffold(
+    isTablet: Boolean,
+    pagerState: PagerState,
+    onOpenDrawer: () -> Unit,
+    onPageSelected: (Int) -> Unit,
+    onRefresh: () -> Unit,
+    onSettings: () -> Unit,
+    onAddFolder: () -> Unit,
+    onAddDevice: () -> Unit,
+    folders: List<FolderUiModel>?,
+    devices: List<DeviceUiModel>?,
+    serviceState: SyncthingService.State,
+    isAmoled: Boolean,
+) {
+    Scaffold(
             topBar = {
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+                        if (!isTablet) {
+                            IconButton(onClick = onOpenDrawer) {
+                                Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+                            }
                         }
                     },
                     actions = {
                         if (pagerState.currentPage == TAB_FOLDERS) {
-                            IconButton(onClick = {
-                                if (api != null && apiConfigLoaded) {
-                                    api.rescanAll()
-                                }
-                            }) {
+                            IconButton(onClick = onRefresh) {
                                 Icon(
                                     Icons.Outlined.Refresh,
                                     stringResource(R.string.activity_main_bottom_navigation_rescan_all)
                                 )
                             }
                         }
-                        IconButton(onClick = { navigator.openSettings() }) {
+                        IconButton(onClick = onSettings) {
                             Icon(Icons.Outlined.Settings, stringResource(R.string.settings_title))
                         }
                     }
@@ -168,12 +233,12 @@ fun HomeScreen(
                 // editor's save button), tab-aware: each list tab adds its own kind.
                 when (pagerState.currentPage) {
                     TAB_FOLDERS -> {
-                        FloatingActionButton(onClick = { navigator.openFolderEdit(null, true) }) {
+                        FloatingActionButton(onClick = onAddFolder) {
                             Icon(Icons.Outlined.Add, stringResource(R.string.add_folder))
                         }
                     }
                     TAB_DEVICES -> {
-                        FloatingActionButton(onClick = { navigator.openDeviceEdit(null, true) }) {
+                        FloatingActionButton(onClick = onAddDevice) {
                             Icon(Icons.Outlined.Add, stringResource(R.string.add_device))
                         }
                     }
@@ -181,33 +246,35 @@ fun HomeScreen(
                 }
             },
             bottomBar = {
-                // Pure AMOLED: black bar, separated from the content only by a faint
-                // hairline - no tinted surface, matching the outlined-card treatment.
-                Column {
-                    if (isAmoled) {
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                                .copy(alpha = AMOLED_CARD_BORDER_ALPHA)
-                        )
-                    }
-                    NavigationBar(
-                        containerColor = if (isAmoled) Color.Black
-                            else MaterialTheme.colorScheme.surfaceContainer
-                    ) {
-                        TAB_TITLES.forEachIndexed { index, titleRes ->
-                            val selected = pagerState.currentPage == index
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
-                                        contentDescription = null
-                                    )
-                                },
-                                label = { Text(stringResource(titleRes)) }
+                if (!isTablet) {
+                    // Pure AMOLED: black bar, separated from the content only by a faint
+                    // hairline - no tinted surface, matching the outlined-card treatment.
+                    Column {
+                        if (isAmoled) {
+                            HorizontalDivider(
+                                thickness = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
+                                    .copy(alpha = AMOLED_CARD_BORDER_ALPHA)
                             )
+                        }
+                        NavigationBar(
+                            containerColor = if (isAmoled) Color.Black
+                                else MaterialTheme.colorScheme.surfaceContainer
+                        ) {
+                            TAB_TITLES.forEachIndexed { index, titleRes ->
+                                val selected = pagerState.currentPage == index
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = { onPageSelected(index) },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
+                                            contentDescription = null
+                                        )
+                                    },
+                                    label = { Text(stringResource(titleRes)) }
+                                )
+                            }
                         }
                     }
                 }
@@ -238,6 +305,39 @@ fun HomeScreen(
                     )
                 }
             }
+    }
+}
+
+@Composable
+private fun TabletHomeNavigationRail(
+    currentPage: Int,
+    onPageSelected: (Int) -> Unit,
+    onOpenDrawer: () -> Unit,
+) {
+    val isAmoled = LocalAmoledTheme.current
+    NavigationRail(
+        containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+        header = {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+            }
+            Spacer(Modifier.height(8.dp))
+        },
+    ) {
+        TAB_TITLES.forEachIndexed { index, titleRes ->
+            val selected = currentPage == index
+            NavigationRailItem(
+                selected = selected,
+                onClick = { onPageSelected(index) },
+                icon = {
+                    Icon(
+                        imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
+                        contentDescription = null,
+                    )
+                },
+                label = { Text(stringResource(titleRes)) },
+                alwaysShowLabel = true,
+            )
         }
     }
 }
@@ -366,36 +466,40 @@ private fun FolderListPage(
             )
         }
     }
-    LazyColumn(
-        state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
-        modifier = Modifier.fillMaxSize(),
-        // Keep the last row reachable above the bottom-right FAB.
-        contentPadding = PaddingValues(bottom = 96.dp)
-    ) {
-        // One item per group: the whole section is a single card that expands
-        // or collapses inside itself. Adding/removing individual folder items
-        // on toggle (the old design) made the collapse janky, because every
-        // toggle rewrote the LazyColumn item set and forced a full reflow.
-        items(sections, key = { "group:" + it.groupName }) { section ->
-            HomeGroupCard(
-                title = if (section.groupName.isEmpty())
-                    stringResource(R.string.folder_group_ungrouped)
-                else section.groupName,
-                itemCount = section.items.size,
-                expanded = section.groupName !in collapsedGroups,
-                onToggle = { toggleGroup(section.groupName) },
-            ) {
-                GroupRowDivider()
-                section.items.forEachIndexed { index, model ->
-                    FolderRowContent(
-                        model = model,
-                        onEdit = onEdit,
-                        onOverride = onOverride,
-                        onRevert = onRevert,
-                        onReauthorize = onReauthorize,
-                    )
-                    if (index < section.items.lastIndex) {
-                        GroupRowDivider()
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
+            modifier = Modifier
+                .contentWidthForTablet(LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP)
+                .fillMaxSize(),
+            // Keep the last row reachable above the bottom-right FAB.
+            contentPadding = PaddingValues(bottom = 96.dp)
+        ) {
+            // One item per group: the whole section is a single card that expands
+            // or collapses inside itself. Adding/removing individual folder items
+            // on toggle (the old design) made the collapse janky, because every
+            // toggle rewrote the LazyColumn item set and forced a full reflow.
+            items(sections, key = { "group:" + it.groupName }) { section ->
+                HomeGroupCard(
+                    title = if (section.groupName.isEmpty())
+                        stringResource(R.string.folder_group_ungrouped)
+                    else section.groupName,
+                    itemCount = section.items.size,
+                    expanded = section.groupName !in collapsedGroups,
+                    onToggle = { toggleGroup(section.groupName) },
+                ) {
+                    GroupRowDivider()
+                    section.items.forEachIndexed { index, model ->
+                        FolderRowContent(
+                            model = model,
+                            onEdit = onEdit,
+                            onOverride = onOverride,
+                            onRevert = onRevert,
+                            onReauthorize = onReauthorize,
+                        )
+                        if (index < section.items.lastIndex) {
+                            GroupRowDivider()
+                        }
                     }
                 }
             }
@@ -447,29 +551,33 @@ private fun DeviceListPage(
     val onEdit: (DeviceUiModel) -> Unit = remember(navigator) {
         { model -> navigator.openDeviceEdit(model.id, false) }
     }
-    LazyColumn(
-        state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
-        modifier = Modifier.fillMaxSize(),
-        // Keep the last row reachable above the bottom-right FAB.
-        contentPadding = PaddingValues(bottom = 96.dp)
-    ) {
-        items(sections, key = { "dgroup:" + it.groupName }) { section ->
-            HomeGroupCard(
-                title = if (section.groupName.isEmpty())
-                    stringResource(R.string.folder_group_ungrouped)
-                else section.groupName,
-                itemCount = section.items.size,
-                expanded = section.groupName !in collapsedGroups,
-                onToggle = { toggleGroup(section.groupName) },
-            ) {
-                GroupRowDivider()
-                section.items.forEachIndexed { index, model ->
-                    DeviceRowContent(
-                        model = model,
-                        onEdit = onEdit,
-                    )
-                    if (index < section.items.lastIndex) {
-                        GroupRowDivider()
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
+            modifier = Modifier
+                .contentWidthForTablet(LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP)
+                .fillMaxSize(),
+            // Keep the last row reachable above the bottom-right FAB.
+            contentPadding = PaddingValues(bottom = 96.dp)
+        ) {
+            items(sections, key = { "dgroup:" + it.groupName }) { section ->
+                HomeGroupCard(
+                    title = if (section.groupName.isEmpty())
+                        stringResource(R.string.folder_group_ungrouped)
+                    else section.groupName,
+                    itemCount = section.items.size,
+                    expanded = section.groupName !in collapsedGroups,
+                    onToggle = { toggleGroup(section.groupName) },
+                ) {
+                    GroupRowDivider()
+                    section.items.forEachIndexed { index, model ->
+                        DeviceRowContent(
+                            model = model,
+                            onEdit = onEdit,
+                        )
+                        if (index < section.items.lastIndex) {
+                            GroupRowDivider()
+                        }
                     }
                 }
             }

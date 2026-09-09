@@ -32,7 +32,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -52,7 +54,9 @@ import com.nutomic.syncthingandroid.service.SafBridge
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.TABLET_MIN_WIDTH_DP
 import com.nutomic.syncthingandroid.ui.appPreferences
+import com.nutomic.syncthingandroid.ui.contentWidthForTablet
 import com.nutomic.syncthingandroid.ui.dialogs.ConfirmDialog
 import com.nutomic.syncthingandroid.ui.nav.AppNavigator
 import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
@@ -318,6 +322,7 @@ private fun FolderEditBody(
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
+    val isTablet = LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP
     Box(
         Modifier
             .fillMaxSize()
@@ -326,10 +331,14 @@ private fun FolderEditBody(
             // bottom (ignore patterns) is scrolled into view by Compose itself.
             // Without this the system pans the whole window as a fallback and the
             // FAB's own imePadding double-counts, pushing it far above the keyboard.
-            .imePadding()
+            .imePadding(),
+        contentAlignment = Alignment.TopCenter,
     ) {
         if (folder != null) {
             FolderEditContent(
+                modifier = Modifier
+                    .contentWidthForTablet(isTablet)
+                    .fillMaxSize(),
                 holder = holder,
                 folder = folder,
                 isCreate = isCreate,

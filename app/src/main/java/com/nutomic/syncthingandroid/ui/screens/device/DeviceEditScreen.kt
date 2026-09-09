@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.nutomic.syncthingandroid.R
@@ -40,7 +41,9 @@ import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.TABLET_MIN_WIDTH_DP
 import com.nutomic.syncthingandroid.ui.appPreferences
+import com.nutomic.syncthingandroid.ui.contentWidthForTablet
 import com.nutomic.syncthingandroid.ui.dialogs.CompressionDialog
 import com.nutomic.syncthingandroid.ui.dialogs.ConfirmDialog
 import com.nutomic.syncthingandroid.ui.dialogs.DeviceIdQrDialog
@@ -119,6 +122,7 @@ fun DeviceEditScreen(
     val serviceState = LocalServiceState.current
     val api = service?.api
     val apiConfigLoaded = api?.isConfigLoaded ?: false
+    val isTablet = LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP
     val configRouter = remember { ConfigRouter(context) }
     val preferences = context.appPreferences()
     val prefExpertMode = preferences.getBoolean(Constants.PREF_EXPERT_MODE, false)
@@ -323,11 +327,15 @@ fun DeviceEditScreen(
                     .padding(innerPadding)
                     // Keep the viewport above the IME (see FolderEditScreen comment):
                     // prevents system window pan + FAB imePadding double-counting.
-                    .imePadding()
+                    .imePadding(),
+                contentAlignment = Alignment.TopCenter,
             ) {
                 val d = device
                 if (d != null) {
                     DeviceEditContent(
+                        modifier = Modifier
+                            .contentWidthForTablet(isTablet)
+                            .fillMaxSize(),
                         device = d,
                         holder = holder,
                         isCreate = isCreate,

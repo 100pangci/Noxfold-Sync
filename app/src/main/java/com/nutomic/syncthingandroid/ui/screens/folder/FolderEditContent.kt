@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
  */
 @Composable
 internal fun FolderEditContent(
+    modifier: Modifier = Modifier,
     holder: FolderEditStateHolder,
     folder: com.nutomic.syncthingandroid.model.Folder,
     isCreate: Boolean,
@@ -28,7 +29,10 @@ internal fun FolderEditContent(
     onOpenSyncConditions: () -> Unit,
     onOpenDeviceEdit: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surface) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface,
+    ) {
         androidx.compose.foundation.layout.Column(
             modifier = Modifier
                 .fillMaxWidth()

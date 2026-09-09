@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -43,8 +44,10 @@ import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.TABLET_MIN_WIDTH_DP
 import com.nutomic.syncthingandroid.ui.appPreferences
 import com.nutomic.syncthingandroid.ui.components.AppCard
+import com.nutomic.syncthingandroid.ui.contentWidthForTablet
 import com.nutomic.syncthingandroid.util.Util
 import android.util.Log
 import java.io.IOException
@@ -73,6 +76,7 @@ fun StatusPage(
     val service = LocalSyncthingService.current
     val api = service?.api
     val preferences = context.appPreferences()
+    val isTablet = LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP
 
     var forceStartStopState by remember {
         mutableStateOf(
@@ -133,13 +137,15 @@ fun StatusPage(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            modifier = Modifier
+                .contentWidthForTablet(isTablet)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
         // ---- Run state card: sync progress + state + reasons ----
         AppCard(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -308,6 +314,7 @@ fun StatusPage(
                     }
                 }
             }
+        }
         }
     }
 }

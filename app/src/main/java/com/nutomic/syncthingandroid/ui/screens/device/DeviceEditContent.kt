@@ -70,6 +70,7 @@ import com.nutomic.syncthingandroid.ui.components.ToggleRow
  */
 @Composable
 internal fun DeviceEditContent(
+    modifier: Modifier = Modifier,
     device: Device,
     holder: DeviceEditStateHolder,
     isCreate: Boolean,
@@ -85,6 +86,7 @@ internal fun DeviceEditContent(
 ) {
     Column(
         modifier = Modifier
+            .then(modifier)
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(vertical = 6.dp),
