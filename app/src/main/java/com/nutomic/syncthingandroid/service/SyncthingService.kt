@@ -223,6 +223,9 @@ class SyncthingService : Service() {
 
     private var eventPoller: EventPoller? = null
 
+    /** Forwarded changes that happened before the REST config became usable. */
+    private val pendingSafRescans = LinkedHashSet<String>()
+
     private var runConditionMonitor: RunConditionMonitor? = null
 
     private var syncthingRunnable: SyncthingRunnable? = null
@@ -282,15 +285,16 @@ class SyncthingService : Service() {
 
         notificationHandler.setAppShutdownInProgress(false)
 
-        // Forward SAF provider folders (e.g. fcitx's data root) into real dirs the
-        // core can sync; no-op when no bridge is registered.
-        app.safBridge.startAll()
         // Nudge the core to rescan a forwarded folder whenever the bridge wrote
         // changes into it (the core cannot see SAF/provider-side changes itself).
-        // api is resolved lazily because it may not exist yet at onCreate time.
+        // api is resolved lazily because it may not exist yet at onCreate time. Keep a pending
+        // set so the initial bridge reconcile cannot lose its nudge before config load.
         app.safBridge.onForwardedDirChanged = { folderPath ->
-            api?.rescanFolderByPath(folderPath)
+            requestSafCoreRescan(folderPath)
         }
+        // Install the callback before starting bridges. The first reconcile is immediate and
+        // may finish before the REST API exists.
+        app.safBridge.startAll()
         preferences.registerOnSharedPreferenceChangeListener(syncthingCameraPrefListener)
     }
 
@@ -773,6 +777,13 @@ class SyncthingService : Service() {
             eventPoller = EventPoller(this, restApi).also { it.start() }
         }
 
+        val pending = synchronized(pendingSafRescans) {
+            val paths = pendingSafRescans.toList()
+            pendingSafRescans.clear()
+            paths
+        }
+        pending.forEach { restApi.rescanFolderByPath(it) }
+
         // Close the "enabled while STARTING" gap: ConfigXml already ran before the
         // pref was flipped, so make sure the camera folder exists once the API is up.
         addSyncthingCameraFolderIfMissing()
@@ -809,8 +820,10 @@ class SyncthingService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "onDestroy")
         preferences.unregisterOnSharedPreferenceChangeListener(syncthingCameraPrefListener)
-        (application as SyncthingApp).safBridge.stopAll()
-        (application as SyncthingApp).safBridge.onForwardedDirChanged = null
+        val safBridge = (application as SyncthingApp).safBridge
+        safBridge.onForwardedDirChanged = null
+        safBridge.stopAll()
+        synchronized(pendingSafRescans) { pendingSafRescans.clear() }
         if (runConditionMonitor != null) {
             // Shut down the OnShouldRunChangedListener so we won't get interrupted by run
             // condition events that occur during shutdown.
@@ -825,6 +838,27 @@ class SyncthingService : Service() {
         shutdownToState(State.DISABLED)
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    private fun requestSafCoreRescan(folderPath: String) {
+        val readyApi: RestApi?
+        synchronized(pendingSafRescans) {
+            val currentApi = api
+            if (currentApi == null || !currentApi.isConfigLoaded) {
+                pendingSafRescans.add(folderPath)
+                return
+            }
+            readyApi = currentApi
+        }
+        readyApi?.rescanFolderByPath(folderPath)
+    }
+
+    internal fun pauseSafBridgesForConfigImport(): Boolean {
+        return (application as SyncthingApp).safBridge.pauseForConfigImport()
+    }
+
+    internal fun resumeSafBridgesAfterConfigImport(wasStarted: Boolean) {
+        (application as SyncthingApp).safBridge.resumeAfterConfigImport(wasStarted)
     }
 
     /**

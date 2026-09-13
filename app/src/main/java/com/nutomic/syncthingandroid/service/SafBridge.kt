@@ -18,12 +18,8 @@ import java.security.MessageDigest
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -40,10 +36,25 @@ internal fun isSyncthingInternalName(name: String): Boolean {
  * Syncthing-internal names are skipped. Shared by the per-bridge scan and the
  * stale-snapshot guards in [SafBridge.register]/[SafBridge.startAll].
  */
-private fun scanForwardedDir(dir: File): Map<String, SafBridge.NodeInfo> {
+internal fun scanForwardedDir(dir: File): Map<String, SafBridge.NodeInfo> {
+    return scanForwardedSubtree(dir, "")
+}
+
+internal fun scanForwardedSubtree(
+    root: File,
+    subtree: String,
+): Map<String, SafBridge.NodeInfo> {
     val result = LinkedHashMap<String, SafBridge.NodeInfo>()
-    fun walk(dir: File, prefix: String) {
-        val entries = dir.listFiles() ?: return
+    val dir = if (subtree.isEmpty()) root else File(root, subtree)
+    if (!dir.isDirectory) {
+        throw IOException("Forwarded subtree unavailable for ${dir.absolutePath}")
+    }
+    if (subtree.isNotEmpty()) {
+        result[subtree] = SafBridge.NodeInfo(isDir = true)
+    }
+    fun walk(current: File, prefix: String) {
+        val entries = current.listFiles()
+            ?: throw IOException("Forwarded directory query failed for ${current.absolutePath}")
         for (entry in entries) {
             if (isSyncthingInternalName(entry.name)) {
                 continue
@@ -57,7 +68,7 @@ private fun scanForwardedDir(dir: File): Map<String, SafBridge.NodeInfo> {
             }
         }
     }
-    walk(dir, "")
+    walk(dir, subtree)
     return result
 }
 
@@ -68,8 +79,8 @@ private fun scanForwardedDir(dir: File): Map<String, SafBridge.NodeInfo> {
  *
  * The core only understands real paths, and provider content is only reachable
  * through content URIs, so [SafBridge] keeps the forwarded folder in sync with the
- * provider. There is NO extra copy of the data: the forwarded directory IS the
- * folder the core syncs - the app just shuffles bytes between both worlds:
+ * provider. The forwarded directory is the Syncthing working tree and is maintained as a
+ * mirror of the provider tree; no additional staging copy is kept:
  *
  * ```
  * DocumentsProvider  <-forward->  files/saf-bridge/<hash>/  <-sync->  Syncthing core
@@ -87,8 +98,9 @@ private fun scanForwardedDir(dir: File): Map<String, SafBridge.NodeInfo> {
  *    other" are told apart and deletions cannot ping-pong.
  *  - If a path changed on BOTH sides since the last pass, the forwarded-dir side
  *    wins (that content is what the core already propagated); this is logged.
- *  - SAF has no change notifications, so provider-side changes are picked up by
- *    polling; forwarded-dir changes are detected in the same pass.
+ *  - SAF does not provide reliable, precise recursive filesystem notifications comparable to
+ *    inotify. Provider observers are treated as change hints, while reconciliation remains the
+ *    source of truth; a periodic full reconciliation is always retained as a fallback.
  */
 class SafBridge(private val context: Context) {
 
@@ -99,14 +111,8 @@ class SafBridge(private val context: Context) {
         /** Pref holding the JSON map "forwarded dir absolute path" -> "tree uri". */
         private const val PREF_MAPPINGS = "saf_bridge_mappings"
 
-        /** Pref prefix for the persisted last-forwarded snapshot of each bridge. */
-        private const val PREF_STATE_PREFIX = "saf_bridge_state_"
-
         /** Directory (inside the app's files dir) holding all forwarded folders. */
         private const val BRIDGE_ROOT_NAME = "saf-bridge"
-
-        /** Provider-side change polling interval; there is no change notification. */
-        private const val POLL_INTERVAL_MS = 15_000L
 
         /**
          * Returns true if the given SAF result must be forwarded instead of being
@@ -125,9 +131,13 @@ class SafBridge(private val context: Context) {
 
     private val gson = Gson()
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    private val snapshotStore: SnapshotStore = SharedPreferencesSnapshotStore(prefs, gson)
     private val bridgeRoot = File(context.filesDir, BRIDGE_ROOT_NAME)
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val lifecycleLock = Any()
     private val bridges = LinkedHashMap<String, Bridge>()
+    private var nextGeneration = 0L
+    @Volatile
     private var started = false
 
     /**
@@ -146,9 +156,13 @@ class SafBridge(private val context: Context) {
     var onForwardedDirChanged: ((folderPath: String) -> Unit)? = null
 
     /** Snapshot entry of one path in a forwarded/provider tree. */
-    data class NodeInfo(val isDir: Boolean, val size: Long = 0, val mtime: Long = 0)
+    data class NodeInfo(
+        val isDir: Boolean,
+        val size: Long = 0,
+        val mtime: Long = 0,
+        val contentHash: String? = null,
+    )
 
-    private val stateType = object : TypeToken<Map<String, NodeInfo>>() {}.type
     private val mappingsType = object : TypeToken<Map<String, String>>() {}.type
 
     private fun loadMappings(): MutableMap<String, String> {
@@ -168,19 +182,25 @@ class SafBridge(private val context: Context) {
         prefs.edit().putString(PREF_MAPPINGS, gson.toJson(mappings)).commit()
     }
 
+    private fun commitMappingsAndRemoveStates(
+        mappings: Map<String, String>,
+        stateKeys: Set<String>,
+    ) {
+        // Mapping and state cleanup must be one preference transaction. A bridge generation
+        // still in flight is additionally checked under [lifecycleLock] before it can commit.
+        val editor = prefs.edit().putString(PREF_MAPPINGS, gson.toJson(mappings))
+        stateKeys.forEach { editor.remove(SharedPreferencesSnapshotStore.STATE_PREFIX + it) }
+        editor.commit()
+    }
+
     private fun loadState(stateKey: String): Map<String, NodeInfo> {
-        val json = prefs.getString(PREF_STATE_PREFIX + stateKey, null) ?: return emptyMap()
-        return try {
-            val parsed: Map<String, NodeInfo>? = gson.fromJson(json, stateType)
-            parsed ?: emptyMap()
-        } catch (e: Exception) {
-            Log.w(TAG, "loadState: Corrupt state pref for $stateKey, starting over", e)
-            emptyMap()
-        }
+        return snapshotStore.loadBridge(stateKey)
     }
 
     private fun saveState(stateKey: String, state: Map<String, NodeInfo>) {
-        prefs.edit().putString(PREF_STATE_PREFIX + stateKey, gson.toJson(state)).commit()
+        if (!snapshotStore.replaceFullSnapshot(stateKey, state)) {
+            throw IOException("Could not commit snapshot for $stateKey")
+        }
     }
 
     /**
@@ -199,17 +219,32 @@ class SafBridge(private val context: Context) {
      * pref removal and the directory delete, or a config import can restore a
      * snapshot for a wiped directory.
      */
-    private fun snapshotMatchesForwardedDir(folderPath: String, stateKey: String): Boolean {
-        val state = loadState(stateKey)
-        if (state.isEmpty()) {
-            return true
+    private enum class SnapshotMatch {
+        MATCH,
+        STALE,
+        UNKNOWN,
+    }
+
+    private fun snapshotMatchesForwardedDir(folderPath: String, stateKey: String): SnapshotMatch {
+        return try {
+            val state = loadState(stateKey)
+            if (state.isEmpty()) {
+                return SnapshotMatch.MATCH
+            }
+            val dir = File(folderPath)
+            if (!dir.isDirectory) {
+                return SnapshotMatch.STALE
+            }
+            val present = scanForwardedDir(dir)
+            if (state.keys.all { present.containsKey(it) }) {
+                SnapshotMatch.MATCH
+            } else {
+                SnapshotMatch.STALE
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "snapshotMatchesForwardedDir: Forwarded scan unavailable for [$folderPath]", e)
+            SnapshotMatch.UNKNOWN
         }
-        val dir = File(folderPath)
-        if (!dir.isDirectory) {
-            return false
-        }
-        val present = scanForwardedDir(dir)
-        return state.keys.all { present.containsKey(it) }
     }
 
     /**
@@ -218,28 +253,41 @@ class SafBridge(private val context: Context) {
      */
     fun register(uri: Uri): String {
         val folderPath = File(bridgeRoot, hashOf(uri)).absolutePath
-        val mappings = loadMappings()
-        if (mappings[folderPath] != uri.toString()) {
-            mappings[folderPath] = uri.toString()
-            saveMappings(mappings)
-        }
-        synchronized(bridges) {
-            if (!bridges.containsKey(folderPath)) {
+        val bridgeToStart: Bridge?
+        synchronized(lifecycleLock) {
+            val mappings = loadMappings()
+            if (mappings[folderPath] != uri.toString()) {
+                mappings[folderPath] = uri.toString()
+                saveMappings(mappings)
+            }
+            val bridge = bridges[folderPath] ?: run {
+                var providerFirstBootstrap = false
                 // Re-adding a folder whose forwarded dir is gone/emptied while a
                 // stale snapshot survived (e.g. an in-flight pass re-persisted it
                 // after the folder removal): diffing against it would read the
                 // empty dir as deletions and wipe the provider. Start from a clean
                 // snapshot so the provider content is PULLED instead.
-                if (!snapshotMatchesForwardedDir(folderPath, hashOf(uri))) {
-                    Log.i(TAG, "register: Stale snapshot for [$folderPath], dropping it")
-                    prefs.edit().remove(PREF_STATE_PREFIX + hashOf(uri)).commit()
+                when (snapshotMatchesForwardedDir(folderPath, hashOf(uri))) {
+                    SnapshotMatch.STALE -> {
+                        Log.i(TAG, "register: Stale snapshot for [$folderPath], dropping it")
+                        snapshotStore.clearBridge(hashOf(uri))
+                        providerFirstBootstrap = true
+                    }
+                    SnapshotMatch.UNKNOWN -> {
+                        Log.w(TAG, "register: Cannot validate snapshot for [$folderPath], keeping it")
+                    }
+                    SnapshotMatch.MATCH -> Unit
                 }
-                bridges[folderPath] = Bridge(folderPath, uri)
+                Bridge(
+                    folderPath,
+                    uri,
+                    ++nextGeneration,
+                    providerFirstBootstrap,
+                ).also { bridges[folderPath] = it }
             }
+            bridgeToStart = if (started) bridge else null
         }
-        if (started) {
-            synchronized(bridges) { bridges[folderPath] }?.start()
-        }
+        bridgeToStart?.start()
         return folderPath
     }
 
@@ -283,19 +331,26 @@ class SafBridge(private val context: Context) {
      * kept EXACTLY as-is so the imported config keeps working without a rewrite.
      */
     fun reauthorize(folderPath: String, uri: Uri) {
-        val mappings = loadMappings()
-        mappings[folderPath] = uri.toString()
-        saveMappings(mappings)
-        // Re-authorizing implies a fresh forwarded dir (data wiped / re-install):
-        // drop any stale imported snapshot so provider content is PULLED instead of
-        // being diffed against it (which could produce bogus provider deletions).
-        prefs.edit().remove(PREF_STATE_PREFIX + hashOf(uri)).commit()
-        val bridge = synchronized(bridges) {
-            bridges.getOrPut(folderPath) { Bridge(folderPath, uri) }
+        val bridgeToStart: Bridge?
+        synchronized(lifecycleLock) {
+            val mappings = loadMappings()
+            val oldBridge = bridges.remove(folderPath)
+            val oldUri = oldBridge?.uri ?: mappings[folderPath]?.let(Uri::parse)
+            oldBridge?.stop()
+            mappings[folderPath] = uri.toString()
+            // Re-authorizing implies a fresh forwarded dir (data wiped / re-install):
+            // drop stale state for both the previous and new URI. The old in-memory bridge
+            // is replaced so it can never continue reading the previous provider tree.
+            val stateKeys = buildSet {
+                oldUri?.let { add(hashOf(it)) }
+                add(hashOf(uri))
+            }
+            commitMappingsAndRemoveStates(mappings, stateKeys)
+            val bridge = Bridge(folderPath, uri, ++nextGeneration, providerFirstBootstrap = true)
+            bridges[folderPath] = bridge
+            bridgeToStart = if (started) bridge else null
         }
-        if (started) {
-            bridge.start()
-        }
+        bridgeToStart?.start()
     }
 
     /**
@@ -304,75 +359,155 @@ class SafBridge(private val context: Context) {
      * Safe to call for non-forwarded paths: they are ignored.
      */
     fun unregister(folderPath: String) {
-        val bridge = synchronized(bridges) { bridges.remove(folderPath) }
-        bridge?.stop()
-        val mappings = loadMappings()
-        val uriString = mappings.remove(folderPath)
-        if (uriString == null) {
-            return
+        synchronized(lifecycleLock) {
+            val bridge = bridges.remove(folderPath)
+            val mappings = loadMappings()
+            val uriString = mappings.remove(folderPath)
+            if (bridge == null && uriString == null) {
+                return
+            }
+            // Invalidate before clearing persisted state. Any in-flight pass that reaches its
+            // commit gate after this point fails the generation check.
+            bridge?.stop()
+            val stateKeys = buildSet {
+                bridge?.uri?.let { add(hashOf(it)) }
+                uriString?.let { add(hashOf(Uri.parse(it))) }
+            }
+            commitMappingsAndRemoveStates(mappings, stateKeys)
         }
-        saveMappings(mappings)
-        // commit() (not apply()): an in-flight forward pass may still be running
-        // on this bridge (stop() is cooperative, it does not interrupt the pass)
-        // and any state write it does afterwards must not land AFTER this removal.
-        // The pass itself is additionally gated by Bridge.active, see forwardPass.
-        prefs.edit().remove(PREF_STATE_PREFIX + hashOf(Uri.parse(uriString))).commit()
         File(folderPath).deleteRecursively()
     }
 
     /** Starts the forwarding loops for all persisted mappings (idempotent). */
     fun startAll() {
-        if (started) {
-            return
-        }
-        started = true
-        bridgeRoot.mkdirs()
-        val mappings = loadMappings()
-        if (mappings.isEmpty()) {
-            Log.i(TAG, "startAll: No forwarded folders registered")
-            return
-        }
-        for ((folderPath, uriString) in mappings) {
-            val uri = Uri.parse(uriString)
-            if (!hasUsableGrant(uri)) {
-                // Grant revoked by clear-data/reinstall; the config import restored
-                // the mapping but only re-picking the folder can restore access.
-                Log.i(TAG, "startAll: Skipping [$folderPath], SAF grant lost; open the folder to re-authorize")
-                continue
+        val bridgesToStart: List<Bridge>
+        synchronized(lifecycleLock) {
+            if (started) {
+                return
             }
-            // Fresh or foreign forwarded dir (config imported onto a wiped install,
-            // crash interrupted a folder removal, ...): start from an empty snapshot
-            // so provider content is PULLED instead of being diffed against a stale
-            // snapshot (which could produce bogus provider deletions).
-            if (!snapshotMatchesForwardedDir(folderPath, hashOf(uri))) {
-                Log.i(TAG, "startAll: Stale snapshot for [$folderPath], dropping it")
-                prefs.edit().remove(PREF_STATE_PREFIX + hashOf(uri)).commit()
+            started = true
+            bridgeRoot.mkdirs()
+            val mappings = loadMappings()
+            if (mappings.isEmpty()) {
+                Log.i(TAG, "startAll: No forwarded folders registered")
+                return
             }
-            val bridge = Bridge(folderPath, uri)
-            synchronized(bridges) { bridges[folderPath] = bridge }
-            bridge.start()
+            val staleStateKeys = LinkedHashSet<String>()
+            val created = ArrayList<Bridge>()
+            for ((folderPath, uriString) in mappings) {
+                val uri = Uri.parse(uriString)
+                if (!hasUsableGrant(uri)) {
+                    // Grant revoked by clear-data/reinstall; the config import restored
+                    // the mapping but only re-picking the folder can restore access.
+                    Log.i(TAG, "startAll: Skipping [$folderPath], SAF grant lost; open the folder to re-authorize")
+                    continue
+                }
+                // Fresh or foreign forwarded dir (config imported onto a wiped install,
+                // crash interrupted a folder removal, ...): start from an empty snapshot
+                // so provider content is PULLED instead of being diffed against a stale
+                // snapshot (which could produce bogus provider deletions).
+                val providerFirstBootstrap = when (snapshotMatchesForwardedDir(folderPath, hashOf(uri))) {
+                    SnapshotMatch.STALE -> {
+                        Log.i(TAG, "startAll: Stale snapshot for [$folderPath], dropping it")
+                        staleStateKeys.add(hashOf(uri))
+                        true
+                    }
+                    SnapshotMatch.UNKNOWN -> {
+                        Log.w(TAG, "startAll: Cannot validate snapshot for [$folderPath], keeping it")
+                        false
+                    }
+                    SnapshotMatch.MATCH -> false
+                }
+                val bridge = Bridge(
+                    folderPath,
+                    uri,
+                    ++nextGeneration,
+                    providerFirstBootstrap,
+                )
+                bridges[folderPath] = bridge
+                created.add(bridge)
+            }
+            if (staleStateKeys.isNotEmpty()) {
+                commitMappingsAndRemoveStates(mappings, staleStateKeys)
+            }
+            bridgesToStart = created
         }
+        bridgesToStart.forEach { it.start() }
     }
 
     fun stopAll() {
-        started = false
-        synchronized(bridges) {
+        synchronized(lifecycleLock) {
+            started = false
             bridges.values.forEach { it.stop() }
             bridges.clear()
+            scope.cancel()
+            // Fresh scope so the singleton instance can be started again by the service.
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         }
-        scope.cancel()
-        // Fresh scope so the singleton instance can be started again by the service.
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 
-    private inner class Bridge(val folderPath: String, val uri: Uri) {
+    /** Stops active sessions before an on-disk config/preferences replacement. */
+    fun pauseForConfigImport(): Boolean {
+        val wasStarted = synchronized(lifecycleLock) { started }
+        stopAll()
+        return wasStarted
+    }
+
+    /** Re-reads mappings and snapshots after a config/preferences replacement. */
+    fun resumeAfterConfigImport(wasStarted: Boolean) {
+        if (wasStarted) {
+            startAll()
+        }
+    }
+
+    private fun isCurrent(bridge: Bridge): Boolean {
+        synchronized(lifecycleLock) {
+            return isCurrentLocked(bridge)
+        }
+    }
+
+    private fun isCurrentLocked(bridge: Bridge): Boolean {
+        return started && bridges[bridge.folderPath]?.generation == bridge.generation &&
+            bridges[bridge.folderPath] === bridge && bridge.active &&
+            bridge.generationGate.isCurrent(bridge.generation)
+    }
+
+    private data class ScopeScan(
+        val scope: String,
+        val saf: Map<String, NodeInfo>,
+        val forwarded: Map<String, NodeInfo>,
+    )
+
+    private inner class Bridge(
+        val folderPath: String,
+        val uri: Uri,
+        val generation: Long,
+        providerFirstBootstrap: Boolean,
+    ) {
 
         private val stateKey = hashOf(uri)
         private val forwardedDir = File(folderPath)
         private val tree: SafTree = DocumentFileSafTree(context, uri)
         private val inFlight = java.util.concurrent.atomic.AtomicBoolean(false)
         private var emptySafScans = 0
-        private var loop: Job? = null
+        val generationGate = GenerationGate(generation)
+        private val dirtyPaths = DirtyPathTracker()
+        @Volatile
+        private var providerFirstBootstrap = providerFirstBootstrap
+        private val startStopLock = Any()
+        private val providerObserver = ProviderObserver(context.contentResolver, uri) {
+            dirtyPaths.markSafRoot()
+            scheduler?.requestReconcile()
+        }
+        private val forwardedObserver = ForwardedTreeObserver(
+            root = forwardedDir,
+            onChangeHint = { path ->
+                dirtyPaths.markForwardedPath(path)
+                scheduler?.requestReconcile()
+            },
+        )
+        @Volatile
+        private var scheduler: ReconcileScheduler? = null
 
         /**
          * Flipped to false by [stop]; a pass that is already running consults it
@@ -380,55 +515,99 @@ class SafBridge(private val context: Context) {
          * can never undo unregister's state cleanup.
          */
         @Volatile
-        private var active = true
+        var active = true
 
         fun start() {
-            if (loop?.isActive == true) {
-                return
-            }
-            loop = scope.launch {
-                Log.i(TAG, "start: Forwarding [$folderPath]")
-                while (isActive) {
-                    try {
-                        forwardPass()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "forwardPass: Failed for [$folderPath]", e)
-                    }
-                    delay(POLL_INTERVAL_MS)
+            synchronized(startStopLock) {
+                if (!active || scheduler != null) {
+                    return
                 }
+                forwardedDir.mkdirs()
+                try {
+                    providerObserver.start()
+                } catch (e: Exception) {
+                    // A provider may reject observer registration. The scheduler still starts
+                    // and the periodic full reconciliation remains sufficient for correctness.
+                    Log.w(TAG, "start: Provider observer unavailable for [$folderPath]", e)
+                }
+                forwardedObserver.start()
+                val newScheduler = ReconcileScheduler(
+                    scope = scope,
+                    reconcile = { full -> forwardPass(full) },
+                    onFailure = { e ->
+                        Log.w(TAG, "reconcile: Failed for [$folderPath]", e)
+                    },
+                )
+                scheduler = newScheduler
+                Log.i(TAG, "start: Forwarding [$folderPath], generation=$generation")
+                newScheduler.start()
             }
         }
 
         fun stop() {
-            // Cooperative: the pass currently in flight (if any) is not
-            // interruptible and runs to completion - only the next poll loop
-            // iteration stops. forwardPass consults [active] before persisting
-            // anything so a stopped bridge can never re-write a stale snapshot
-            // (e.g. after unregister cleared it) or nudge the core.
-            active = false
-            loop?.cancel()
-            loop = null
+            val currentScheduler: ReconcileScheduler?
+            synchronized(startStopLock) {
+                // Cooperative: a blocking provider/file operation already in progress may
+                // finish, but generation checks prevent it from committing state afterwards.
+                active = false
+                generationGate.invalidate()
+                currentScheduler = scheduler
+                scheduler = null
+            }
+            providerObserver.stop()
+            forwardedObserver.stop()
+            currentScheduler?.stop()
         }
 
-        suspend fun forwardPass() = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        suspend fun forwardPass(full: Boolean) = kotlinx.coroutines.withContext(Dispatchers.IO) {
             if (!inFlight.compareAndSet(false, true)) {
                 return@withContext
             }
+            val requested = dirtyPaths.take()
             try {
-                if (!active) {
+                if (!isCurrent(this@Bridge)) {
                     // Stopped between the last poll iteration and this one.
                     return@withContext
                 }
-                val saf = tree.scan()
-                val fwd = scanForwardedDir(forwardedDir)
                 val last = loadState(stateKey)
+                val requestedScopes = if (full || requested.full) {
+                    listOf("")
+                } else {
+                    coalesceScopes(requested.roots)
+                }
+                if (requestedScopes.isEmpty()) {
+                    return@withContext
+                }
+
+                val scans = try {
+                    scanScopes(requestedScopes, last)
+                } catch (e: IOException) {
+                    if (requestedScopes.size == 1 && requestedScopes[0].isEmpty()) {
+                        throw e
+                    }
+                    // A subtree may have been created/deleted between the observer event and
+                    // this scan. Re-read the root rather than guessing that the subtree is empty.
+                    Log.i(TAG, "forwardPass: [$stateKey] Subtree scan unavailable, retrying full scan", e)
+                    scanScopes(listOf(""), last)
+                }
+                if (!isCurrent(this@Bridge)) {
+                    return@withContext
+                }
 
                 // A single failed/empty provider scan (transient provider error) must
                 // never wipe the whole tree; require two consecutive empty scans
                 // before accepting a genuinely emptied provider.
-                if (saf.isEmpty() && last.isNotEmpty()) {
+                val providerLooksEmpty = scans.any { scan ->
+                    scan.saf.isEmpty() && (
+                        entriesInScope(last, scan.scope).isNotEmpty() ||
+                            (providerFirstBootstrap && scan.forwarded.isNotEmpty())
+                        )
+                }
+                if (providerLooksEmpty) {
                     emptySafScans++
                     if (emptySafScans < 2) {
+                        dirtyPaths.restore(requested.copy(full = full || requested.full))
+                        scheduler?.requestReconcile()
                         Log.w(
                             TAG, "forwardPass: [$stateKey] Provider scan empty while " +
                                 "snapshot holds ${last.size} entries; skipping this pass"
@@ -440,33 +619,171 @@ class SafBridge(private val context: Context) {
                     emptySafScans = 0
                 }
 
-                val plan = MirrorMerge.plan(saf, fwd, last)
-                val appliedFwd = applyToForwardedDir(plan, tree)
-                val appliedSaf = applyToSaf(plan)
+                val updated = LinkedHashMap(last)
+                var appliedForwardedAny = false
+                var hasWork = false
+                val summaries = ArrayList<String>()
+                for (scan in scans) {
+                    if (!isCurrent(this@Bridge)) {
+                        return@withContext
+                    }
+                    val lastScope = entriesInScope(last, scan.scope)
+                    // A reauthorization, fresh install, or stale baseline must restore provider
+                    // content first. Treat the currently forwarded tree as the comparison
+                    // baseline for this bootstrap pass, so stale forwarded files cannot win a
+                    // conflict against the freshly authorized provider tree.
+                    val mergeBaseline = if (providerFirstBootstrap) {
+                        scan.forwarded
+                    } else {
+                        lastScope
+                    }
+                    val plan = MirrorMerge.plan(scan.saf, scan.forwarded, mergeBaseline)
+                    val appliedFwd = applyToForwardedDir(plan, tree)
+                    val appliedSaf = applyToSaf(plan)
+                    val verified = MirrorMerge.verifiedResult(plan, appliedFwd, appliedSaf, mergeBaseline)
+                    replaceScope(updated, scan.scope, verified)
+                    appliedForwardedAny = appliedForwardedAny || appliedFwd.isNotEmpty()
+                    hasWork = hasWork || plan.hasWork()
+                    if (plan.hasWork()) {
+                        summaries.add(plan.summary())
+                    }
+                }
                 // Only operations that actually succeeded advance the snapshot;
                 // failures are retried next pass (see MirrorMerge.verifiedResult).
                 // Never persist when the bridge was stopped mid-pass (folder
                 // removed): writing now would resurrect the snapshot that
                 // unregister just cleared and turn the next re-add into a
                 // provider-wide deletion.
-                if (!active) {
+                if (!isCurrent(this@Bridge)) {
                     Log.i(TAG, "forwardPass: [$stateKey] Bridge stopped mid-pass, not persisting state")
                     return@withContext
                 }
-                saveState(stateKey, MirrorMerge.verifiedResult(plan, appliedFwd, appliedSaf))
-                if (plan.hasWork()) {
-                    Log.i(TAG, "forwardPass: [$stateKey] ${plan.summary()}")
+                val committed = synchronized(lifecycleLock) {
+                    if (!isCurrentLocked(this@Bridge)) {
+                        false
+                    } else {
+                        generationGate.commitIfCurrent(generation) {
+                            saveState(stateKey, updated)
+                            providerFirstBootstrap = false
+                        }
+                    }
                 }
-                // The core cannot see the forwarded dir change on its own (no SAF
-                // change notifications; fs watcher on the app-private dir is not
-                // guaranteed) - nudge it to rescan this folder now instead of
-                // waiting up to rescanIntervalS.
-                if (appliedFwd.isNotEmpty()) {
+                if (!committed) {
+                    Log.i(TAG, "forwardPass: [$stateKey] Generation invalid before commit")
+                    return@withContext
+                }
+                if (hasWork) {
+                    Log.i(TAG, "forwardPass: [$stateKey] ${summaries.joinToString("; ")}")
+                }
+                // The core cannot be assumed to observe the app-private working tree. Nudge it
+                // after a committed forwarded change instead of waiting for its scan interval.
+                if (appliedForwardedAny && isCurrent(this@Bridge)) {
                     onForwardedDirChanged?.invoke(folderPath)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isCurrent(this@Bridge)) {
+                    // An unknown scan or apply failure leaves the invalidation pending. The
+                    // periodic full fallback will retry even if the provider sends no event.
+                    dirtyPaths.restore(requested.copy(full = full || requested.full))
+                }
+                throw e
             } finally {
                 inFlight.set(false)
             }
+        }
+
+        private fun scanScopes(
+            scopes: List<String>,
+            last: Map<String, NodeInfo>,
+        ): List<ScopeScan> {
+            return scopes.map { scope ->
+                val safMetadata = if (scope.isEmpty()) tree.scan() else tree.scanSubtree(scope)
+                val forwardedMetadata = scanForwardedSubtree(forwardedDir, scope)
+                val (saf, forwarded) = addContentHashes(safMetadata, forwardedMetadata, last)
+                ScopeScan(scope, saf, forwarded)
+            }
+        }
+
+        private fun addContentHashes(
+            safMetadata: Map<String, NodeInfo>,
+            forwardedMetadata: Map<String, NodeInfo>,
+            last: Map<String, NodeInfo>,
+        ): Pair<Map<String, NodeInfo>, Map<String, NodeInfo>> {
+            val saf = LinkedHashMap(safMetadata)
+            val forwarded = LinkedHashMap(forwardedMetadata)
+            val paths = saf.keys + forwarded.keys + last.keys
+            for (path in paths) {
+                val safNode = saf[path]
+                val forwardedNode = forwarded[path]
+                val baseline = last[path]
+                if (!needsContentHash(safNode, baseline) &&
+                    !needsContentHash(forwardedNode, baseline)
+                ) {
+                    continue
+                }
+                if (safNode?.isDir == false && safNode.contentHash == null) {
+                    val hash = tree.contentHash(path)
+                        ?: throw IOException("Provider content unavailable for hashing: $path")
+                    saf[path] = safNode.copy(contentHash = hash)
+                }
+                if (forwardedNode?.isDir == false && forwardedNode.contentHash == null) {
+                    forwarded[path] = forwardedNode.copy(
+                        contentHash = ContentHasher.sha256(File(forwardedDir, path))
+                    )
+                }
+            }
+            return saf to forwarded
+        }
+
+        private fun needsContentHash(
+            current: NodeInfo?,
+            baseline: NodeInfo?,
+        ): Boolean {
+            if (current?.isDir != false) {
+                return false
+            }
+            if (baseline == null) {
+                return current.mtime == 0L
+            }
+            return !baseline.isDir && current.size == baseline.size &&
+                (current.mtime == 0L || baseline.mtime == 0L)
+        }
+
+        private fun coalesceScopes(scopes: Set<String>): List<String> {
+            val result = ArrayList<String>()
+            for (scope in scopes.sortedWith(compareBy({ it.count { ch -> ch == '/' } }, { it }))) {
+                if (result.any { it.isEmpty() || scope == it || scope.startsWith("$it/") }) {
+                    continue
+                }
+                result.removeAll { it.startsWith("$scope/") }
+                result.add(scope)
+            }
+            return result
+        }
+
+        private fun entriesInScope(
+            entries: Map<String, NodeInfo>,
+            scope: String,
+        ): Map<String, NodeInfo> {
+            if (scope.isEmpty()) {
+                return entries
+            }
+            return entries.filterKeys { it == scope || it.startsWith("$scope/") }
+        }
+
+        private fun replaceScope(
+            target: MutableMap<String, NodeInfo>,
+            scope: String,
+            replacement: Map<String, NodeInfo>,
+        ) {
+            if (scope.isEmpty()) {
+                target.clear()
+            } else {
+                target.keys.removeAll { it == scope || it.startsWith("$scope/") }
+            }
+            target.putAll(replacement)
         }
 
         /**
@@ -477,6 +794,9 @@ class SafBridge(private val context: Context) {
         private fun applyToForwardedDir(plan: MirrorMerge.Plan, tree: SafTree): Set<String> {
             val applied = HashSet<String>()
             for (path in plan.deleteInForwarded) {
+                if (!isCurrent(this@Bridge)) {
+                    return applied
+                }
                 if (File(forwardedDir, path).deleteRecursively()) {
                     applied.add(path)
                 } else {
@@ -484,6 +804,9 @@ class SafBridge(private val context: Context) {
                 }
             }
             for (path in plan.makeDirsInForwarded) {
+                if (!isCurrent(this@Bridge)) {
+                    return applied
+                }
                 val dir = File(forwardedDir, path)
                 if (dir.mkdirs() || dir.isDirectory) {
                     applied.add(path)
@@ -494,6 +817,9 @@ class SafBridge(private val context: Context) {
             val tempDir = File(bridgeRoot, stateKey + ".tmp")
             tempDir.mkdirs()
             for ((path, info) in plan.copyToForwarded) {
+                if (!isCurrent(this@Bridge)) {
+                    break
+                }
                 val target = File(forwardedDir, path)
                 target.parentFile?.mkdirs()
                 if (target.exists()) {
@@ -514,6 +840,10 @@ class SafBridge(private val context: Context) {
                         Log.w(TAG, "applyToForwardedDir: Size mismatch after copy of $path")
                         temp.delete()
                         continue
+                    }
+                    if (!isCurrent(this@Bridge)) {
+                        temp.delete()
+                        break
                     }
                     if (!temp.renameTo(target)) {
                         temp.copyTo(target, overwrite = true)
@@ -542,6 +872,9 @@ class SafBridge(private val context: Context) {
         private fun applyToSaf(plan: MirrorMerge.Plan): Set<String> {
             val applied = HashSet<String>()
             for (path in plan.deleteInSaf) {
+                if (!isCurrent(this@Bridge)) {
+                    return applied
+                }
                 if (tree.delete(path)) {
                     applied.add(path)
                 } else {
@@ -549,6 +882,9 @@ class SafBridge(private val context: Context) {
                 }
             }
             for (path in plan.makeDirsInSaf) {
+                if (!isCurrent(this@Bridge)) {
+                    return applied
+                }
                 if (tree.createDir(path)) {
                     applied.add(path)
                 } else {
@@ -556,6 +892,9 @@ class SafBridge(private val context: Context) {
                 }
             }
             for (path in plan.copyToSaf) {
+                if (!isCurrent(this@Bridge)) {
+                    return applied
+                }
                 val source = File(forwardedDir, path)
                 if (!source.isFile) {
                     continue
@@ -615,29 +954,50 @@ internal object MirrorMerge {
     }
 
     /**
-     * Narrows [Plan.result] down to the entries whose required operations ACTUALLY
-     * succeeded. Failed operations are left out of the snapshot, so the next pass
-     * sees them as "provider changed" again and RETRIES - they must never be
-     * mistaken for deletions on the forwarded side (which would propagate
-     * deletions into the provider).
+     * Applies only verified operations to the previous baseline. In particular, a failed delete
+     * must retain the old baseline entry; dropping it would make the next pass interpret the
+     * still-present file as a new change on the other side and could restore stale data.
      */
     fun verifiedResult(
         plan: Plan,
         appliedFwd: Set<String>,
         appliedSaf: Set<String>
     ): Map<String, SafBridge.NodeInfo> {
-        val result = LinkedHashMap<String, SafBridge.NodeInfo>()
+        // Keep the original helper contract for pure callers that do not provide a baseline.
+        // The bridge always uses the overload below so failed deletes retain their baseline.
+        return verifiedResult(plan, appliedFwd, appliedSaf, emptyMap())
+    }
+
+    fun verifiedResult(
+        plan: Plan,
+        appliedFwd: Set<String>,
+        appliedSaf: Set<String>,
+        baseline: Map<String, SafBridge.NodeInfo>,
+    ): Map<String, SafBridge.NodeInfo> {
+        val touchedFwd = (plan.deleteInForwarded + plan.makeDirsInForwarded +
+            plan.copyToForwarded.map { it.first }).toSet()
+        val touchedSaf = (plan.deleteInSaf + plan.makeDirsInSaf + plan.copyToSaf).toSet()
+        val touched = touchedFwd + touchedSaf
+        val result = LinkedHashMap(baseline)
+
+        // Unchanged paths and successfully represented targets can be copied directly. Touched
+        // paths are applied below so failures can keep their baseline entry.
         for ((path, target) in plan.result) {
-            val touchedFwd = plan.deleteInForwarded.contains(path) ||
-                plan.makeDirsInForwarded.contains(path) ||
-                plan.copyToForwarded.any { it.first == path }
-            val touchedSaf = plan.deleteInSaf.contains(path) ||
-                plan.makeDirsInSaf.contains(path) ||
-                plan.copyToSaf.contains(path)
-            if ((!touchedFwd || appliedFwd.contains(path)) &&
-                (!touchedSaf || appliedSaf.contains(path))
-            ) {
+            if (path !in touched) {
                 result[path] = target
+            }
+        }
+
+        for (path in touched) {
+            if ((!touchedFwd.contains(path) || appliedFwd.contains(path)) &&
+                (!touchedSaf.contains(path) || appliedSaf.contains(path))
+            ) {
+                val target = plan.result[path]
+                if (target == null) {
+                    result.remove(path)
+                } else {
+                    result[path] = target
+                }
             }
         }
         return result
@@ -646,9 +1006,9 @@ internal object MirrorMerge {
     private fun depth(path: String): Int = path.count { it == '/' }
 
     /**
-     * Node equality: directories compare by type only (dir mtimes are not preserved
-     * across providers); files compare by size and mtime, tolerating a missing
-     * (zero) mtime on either side to avoid rewrite oscillation.
+         * Node equality: directories compare by type only (dir mtimes are not preserved
+         * across providers); files use a content hash when one is available, otherwise compare
+         * size and mtime while tolerating a missing (zero) mtime.
      */
     private fun sameNode(a: SafBridge.NodeInfo?, b: SafBridge.NodeInfo?): Boolean {
         if (a == null || b == null) {
@@ -659,6 +1019,9 @@ internal object MirrorMerge {
         }
         if (a.isDir) {
             return true
+        }
+        if (a.contentHash != null || b.contentHash != null) {
+            return a.size == b.size && a.contentHash != null && a.contentHash == b.contentHash
         }
         return a.size == b.size &&
             (a.mtime == b.mtime || a.mtime == 0L || b.mtime == 0L)
@@ -718,7 +1081,11 @@ internal object MirrorMerge {
                         result[path] = f
                     } else {
                         copyToSaf.add(path)
-                        result[path] = SafBridge.NodeInfo(isDir = false, size = f.size)
+                        result[path] = SafBridge.NodeInfo(
+                            isDir = false,
+                            size = f.size,
+                            contentHash = f.contentHash,
+                        )
                     }
                 }
                 else -> {
@@ -730,7 +1097,11 @@ internal object MirrorMerge {
                         result[path] = f
                     } else {
                         copyToSaf.add(path)
-                        result[path] = SafBridge.NodeInfo(isDir = false, size = f.size)
+                        result[path] = SafBridge.NodeInfo(
+                            isDir = false,
+                            size = f.size,
+                            contentHash = f.contentHash,
+                        )
                     }
                 }
             }
@@ -743,7 +1114,7 @@ internal object MirrorMerge {
             deleteInSaf = deleteInSaf.sortedByDescending { depth(it) },
             makeDirsInSaf = makeDirsInSaf,
             copyToSaf = copyToSaf,
-            result = result
+            result = result,
         )
     }
 }
@@ -761,8 +1132,24 @@ internal interface SafTree {
      */
     fun scan(): Map<String, SafBridge.NodeInfo>
 
+    /**
+     * Scans one directory subtree. Implementations may use a full scan as a conservative
+     * fallback, but must throw on provider uncertainty rather than return an empty map.
+     */
+    fun scanSubtree(path: String): Map<String, SafBridge.NodeInfo> {
+        if (path.isEmpty()) {
+            return scan()
+        }
+        return scan().filterKeys { it == path || it.startsWith("$path/") }
+    }
+
     /** Opens the file at [path] for reading, or null if unavailable. */
     fun open(path: String): InputStream?
+
+    /** Computes a streaming hash for [path], or null when the provider cannot open it. */
+    fun contentHash(path: String): String? {
+        return open(path)?.use(ContentHasher::sha256)
+    }
 
     /** Creates the directory at [path] including parents; true on success. */
     fun createDir(path: String): Boolean
@@ -820,9 +1207,21 @@ internal class DocumentFileSafTree(private val context: Context, treeUri: Uri) :
         return dir
     }
 
-    override fun scan(): Map<String, SafBridge.NodeInfo> {
-        val rootNode = root ?: throw IOException("Tree uri unavailable")
+    override fun scan(): Map<String, SafBridge.NodeInfo> = scanSubtree("")
+
+    override fun scanSubtree(path: String): Map<String, SafBridge.NodeInfo> {
+        val rootNode = if (path.isEmpty()) {
+            root ?: throw IOException("Tree uri unavailable")
+        } else {
+            resolve(path) ?: throw IOException("Provider subtree unavailable for $path")
+        }
+        if (!rootNode.isDirectory) {
+            throw IOException("Provider subtree is not a directory: $path")
+        }
         val result = LinkedHashMap<String, SafBridge.NodeInfo>()
+        if (path.isNotEmpty()) {
+            result[path] = SafBridge.NodeInfo(isDir = true)
+        }
         fun walk(dir: DocumentFile, prefix: String) {
             val expected = childCount(dir)
                 ?: throw IOException("Provider query failed for ${dir.uri}")
@@ -833,7 +1232,8 @@ internal class DocumentFileSafTree(private val context: Context, treeUri: Uri) :
                 throw IOException("Provider returned ${children.size}/$expected children for ${dir.uri}")
             }
             for (child in children) {
-                val name = child.name ?: continue
+                val name = child.name
+                    ?: throw IOException("Provider returned an unnamed document for ${child.uri}")
                 if (isSyncthingInternalName(name)) {
                     continue
                 }
@@ -850,7 +1250,7 @@ internal class DocumentFileSafTree(private val context: Context, treeUri: Uri) :
                 }
             }
         }
-        walk(rootNode, "")
+        walk(rootNode, path)
         return result
     }
 
@@ -922,11 +1322,12 @@ internal class DocumentFileSafTree(private val context: Context, treeUri: Uri) :
 
     override fun delete(path: String): Boolean {
         return try {
-            resolve(path)?.delete() ?: true // Already gone counts as deleted.
+            // The path was present in the verified scan that produced this plan. A null result
+            // is therefore treated as unknown/query failure, not as a successful deletion.
+            resolve(path)?.delete() ?: false
         } catch (e: Exception) {
             Log.w(TAG, "delete: Failed to delete $path", e)
             false
         }
     }
 }
-

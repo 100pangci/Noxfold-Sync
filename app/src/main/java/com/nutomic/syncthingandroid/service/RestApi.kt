@@ -604,7 +604,7 @@ class RestApi(
     /**
      * Rescans the folder whose configured path equals [folderPath], if any.
      * Used by [SafBridge] to tell the core about forwarded-dir changes that
-     * happened without a file-system notification (SAF pull, config import).
+     * happened without a reliable filesystem notification (SAF pull, config import).
      * No-op when no folder is configured at that path (e.g. folder just removed).
      */
     fun rescanFolderByPath(folderPath: String) {
