@@ -26,7 +26,6 @@ constraintlayout = "2.2.2"
 core-ktx = "1.19.0"
 documentfile = "1.1.0"
 fragment-ktx = "1.9.0"
-gson = "2.14.0"
 libsu = "6.0.0"
 jbcrypt = "0.4"
 junit = "4.13.2"
@@ -65,10 +64,10 @@ constraintlayout = { module = "androidx.constraintlayout:constraintlayout", vers
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
 documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
 fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "fragment-ktx" }
-gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 libsu-core = { module = "io.github.topjohnwu.libsu:core", version.ref = "libsu" }
 jbcrypt = { module = "org.mindrot:jbcrypt", version.ref = "jbcrypt" }
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinxSerializationCore" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationCore" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 lingala-zip4j = { module = "net.lingala.zip4j:zip4j", version.ref = "lingala-zip4j" }

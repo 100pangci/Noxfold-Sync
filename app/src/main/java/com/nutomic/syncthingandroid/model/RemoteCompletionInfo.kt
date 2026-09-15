@@ -1,14 +1,14 @@
 package com.nutomic.syncthingandroid.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Caches information frequently needed by the wrapper
  * to save expensive calls to Syncthing's REST API.
  * Vars in class do not correspond to JSON results.
- * Public fields on purpose: Gson reflective binding + direct field access from Java tests.
  */
-class RemoteCompletionInfo {
-    @JvmField
-    var completion: Double = 100.0
-    @JvmField
-    var needBytes: Double = 0.0
-}
+@Serializable
+data class RemoteCompletionInfo(
+    var completion: Double = 100.0,
+    var needBytes: Double = 0.0,
+)

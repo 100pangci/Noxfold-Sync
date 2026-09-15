@@ -30,14 +30,15 @@ import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.service.SyncthingServiceBinder
 import com.nutomic.syncthingandroid.ui.theme.ApplicationTheme
 import com.nutomic.syncthingandroid.util.FileUtils
-import com.google.gson.Gson
-import com.google.gson.JsonParser
+import com.nutomic.syncthingandroid.util.json as jsonCodec
 import java.io.File
 import java.time.OffsetDateTime
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonArray
 import com.nutomic.syncthingandroid.ui.screens.recentchanges.RecentChangesScreen
 
 /**
@@ -177,8 +178,8 @@ class RecentChangesActivity : SyncthingActivity(), SyncthingService.OnServiceSta
             )
             // Same parse as RestApi.getDiskEvents: the API returns events oldest-first, so walk
             // the array backwards to get newest-first for display.
-            val array = JsonParser.parseString(result).getAsJsonArray()
-            (array.size() - 1 downTo 0).map { gson.fromJson(array[it], DiskEvent::class.java) }
+            val array = jsonCodec.parseToJsonElement(result).jsonArray
+            (array.size - 1 downTo 0).map { jsonCodec.decodeFromJsonElement<DiskEvent>(array[it]) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -220,12 +221,6 @@ class RecentChangesActivity : SyncthingActivity(), SyncthingService.OnServiceSta
         private val POLL_INTERVAL = 5.seconds
     }
 }
-
-/**
- * Plain Gson instance, same role as RestApi's gson for parsing disk events into
- * [DiskEvent] (all model classes are Kotlin data holders since phase1).
- */
-private val gson = Gson()
 
 enum class ChangeType {
     FILE, DIR, UNKNOWN;

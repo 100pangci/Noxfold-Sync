@@ -38,7 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.background
-import com.google.gson.Gson
+import com.nutomic.syncthingandroid.util.json as jsonCodec
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
 
@@ -46,6 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.RestApi
@@ -631,7 +632,7 @@ private suspend fun resyncCleanDraftFromApi(
     // the REST config), otherwise the recomposition lands right after the
     // enter transition as a visible hitch.
     val unchanged = withContext(Dispatchers.IO) {
-        Gson().toJson(live) == Gson().toJson(holder.folder)
+        jsonCodec.encodeToString(live) == jsonCodec.encodeToString(holder.folder)
     }
     if (!unchanged) {
         holder.folder = live

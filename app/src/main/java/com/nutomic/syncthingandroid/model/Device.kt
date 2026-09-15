@@ -1,60 +1,42 @@
 package com.nutomic.syncthingandroid.model
 
-import android.text.TextUtils
 import android.util.Log
 import com.nutomic.syncthingandroid.util.Luhn
 import java.util.Arrays
 import java.util.Locale
+import kotlinx.serialization.Serializable
 
-/** Public fields on purpose: Gson reflective binding + direct field access from Java tests. */
-class Device {
-    @JvmField
-    var deviceID: String = ""
-    @JvmField
-    var name: String = ""
-    @JvmField
-    var group: String = ""
-    @JvmField
-    var addresses: List<String>? = null
-    @JvmField
-    var allowedNetworks: List<String>? = null
-    @JvmField
-    var compression: String = "metadata"
-    @JvmField
-    var certName: String? = null
-    @JvmField
-    var introducedBy: String = ""
-    @JvmField
-    var introducer: Boolean = false
-    @JvmField
-    var paused: Boolean = false
-    @JvmField
-    var ignoredFolders: MutableList<IgnoredFolder>? = null
-    @JvmField
-    var autoAcceptFolders: Boolean = false
-    @JvmField
-    var maxRecvKbps: Int = 0
-    @JvmField
-    var maxSendKbps: Int = 0
+@Serializable
+class Device(
+    var deviceID: String = "",
+    var name: String = "",
+    var group: String = "",
+    var addresses: List<String>? = null,
+    var allowedNetworks: List<String>? = null,
+    var compression: String = "metadata",
+    var certName: String? = null,
+    var introducedBy: String = "",
+    var introducer: Boolean = false,
+    var paused: Boolean = false,
+    var ignoredFolders: MutableList<IgnoredFolder>? = null,
+    var autoAcceptFolders: Boolean = false,
+    var maxRecvKbps: Int = 0,
+    var maxSendKbps: Int = 0,
 
     // Since v1.12.0
-    @JvmField
-    var untrusted: Boolean = false
+    var untrusted: Boolean = false,
 
     // Since v1.25.0
-    @JvmField
-    var numConnections: Int = 0
-
+    var numConnections: Int = 0,
+) {
     /**
      * Returns the device name, or the first characters of the ID if the name is empty.
      */
     val displayName: String
-        get() {
-            return if (TextUtils.isEmpty(name)) {
-                if (TextUtils.isEmpty(deviceID)) "" else deviceID.substring(0, 7)
-            } else {
-                name
-            }
+        get() = if (name.isEmpty()) {
+            if (deviceID.isEmpty()) "" else deviceID.substring(0, 7)
+        } else {
+            name
         }
 
     /**
@@ -198,7 +180,7 @@ class Device {
         val hostnamePortSplit = address.split(":")
         if (hostnamePortSplit.size > 1) {
             // Check if the hostname or IP address given before the port is empty.
-            if (TextUtils.isEmpty(hostnamePortSplit[0])) {
+            if (hostnamePortSplit[0].isEmpty()) {
                 return false
             }
 

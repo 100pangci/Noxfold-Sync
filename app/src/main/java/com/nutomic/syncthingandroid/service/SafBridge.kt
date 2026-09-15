@@ -7,9 +7,8 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.preference.PreferenceManager
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.nutomic.syncthingandroid.util.FileUtils
+import com.nutomic.syncthingandroid.util.json as jsonCodec
 
 import java.io.File
 import java.io.IOException
@@ -21,6 +20,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 
 /**
  * Names managed by the Syncthing core inside a synced folder stay local-only:
@@ -129,9 +131,8 @@ class SafBridge(private val context: Context) {
         }
     }
 
-    private val gson = Gson()
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-    private val snapshotStore: SnapshotStore = SharedPreferencesSnapshotStore(prefs, gson)
+    private val snapshotStore: SnapshotStore = SharedPreferencesSnapshotStore(prefs)
     private val bridgeRoot = File(context.filesDir, BRIDGE_ROOT_NAME)
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lifecycleLock = Any()
@@ -156,6 +157,7 @@ class SafBridge(private val context: Context) {
     var onForwardedDirChanged: ((folderPath: String) -> Unit)? = null
 
     /** Snapshot entry of one path in a forwarded/provider tree. */
+    @Serializable
     data class NodeInfo(
         val isDir: Boolean,
         val size: Long = 0,
@@ -163,13 +165,10 @@ class SafBridge(private val context: Context) {
         val contentHash: String? = null,
     )
 
-    private val mappingsType = object : TypeToken<Map<String, String>>() {}.type
-
     private fun loadMappings(): MutableMap<String, String> {
-        val json = prefs.getString(PREF_MAPPINGS, null) ?: return LinkedHashMap()
+        val stored = prefs.getString(PREF_MAPPINGS, null) ?: return LinkedHashMap()
         return try {
-            val parsed: Map<String, String>? = gson.fromJson(json, mappingsType)
-            if (parsed != null) LinkedHashMap(parsed) else LinkedHashMap()
+            LinkedHashMap(jsonCodec.decodeFromString<Map<String, String>>(stored))
         } catch (e: Exception) {
             Log.w(TAG, "loadMappings: Corrupt mapping pref, resetting", e)
             LinkedHashMap()
@@ -179,7 +178,7 @@ class SafBridge(private val context: Context) {
     private fun saveMappings(mappings: Map<String, String>) {
         // commit() on purpose: callers (register/reauthorize/unregister) must be
         // able to rely on the mapping being readable immediately afterwards.
-        prefs.edit().putString(PREF_MAPPINGS, gson.toJson(mappings)).commit()
+        prefs.edit().putString(PREF_MAPPINGS, jsonCodec.encodeToString(mappings)).commit()
     }
 
     private fun commitMappingsAndRemoveStates(
@@ -188,7 +187,7 @@ class SafBridge(private val context: Context) {
     ) {
         // Mapping and state cleanup must be one preference transaction. A bridge generation
         // still in flight is additionally checked under [lifecycleLock] before it can commit.
-        val editor = prefs.edit().putString(PREF_MAPPINGS, gson.toJson(mappings))
+        val editor = prefs.edit().putString(PREF_MAPPINGS, jsonCodec.encodeToString(mappings))
         stateKeys.forEach { editor.remove(SharedPreferencesSnapshotStore.STATE_PREFIX + it) }
         editor.commit()
     }

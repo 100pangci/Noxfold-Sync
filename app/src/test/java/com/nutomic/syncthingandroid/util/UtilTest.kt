@@ -1,7 +1,7 @@
 package com.nutomic.syncthingandroid.util
 
-import com.google.gson.reflect.TypeToken
 import com.nutomic.syncthingandroid.model.Folder
+import com.nutomic.syncthingandroid.util.deepCopy
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +12,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-import java.lang.reflect.Type
 import java.util.ArrayList
 
 @RunWith(RobolectricTestRunner::class)
@@ -46,8 +45,7 @@ class UtilTest {
         folder.label = "Alpha"
         folder.path = "/data/folder-a"
 
-        val type: Type = object : TypeToken<Folder>() {}.type
-        val copy = Util.deepCopy(folder, type)
+        val copy = deepCopy(folder)
 
         assertEquals(folder.id, copy.id)
         assertEquals(folder.label, copy.label)
@@ -65,8 +63,7 @@ class UtilTest {
         folder.id = "folder-a"
         folders.add(folder)
 
-        val type: Type = object : TypeToken<List<Folder>>() {}.type
-        val copy = Util.deepCopy(folders, type)
+        val copy = deepCopy(folders)
 
         assertEquals(1, copy.size)
         assertEquals("folder-a", copy[0].id)

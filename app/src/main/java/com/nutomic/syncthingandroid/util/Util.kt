@@ -9,7 +9,6 @@ import android.util.Log
 
 import androidx.appcompat.app.AppCompatActivity
 
-import com.google.gson.Gson
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.service.Constants
 
@@ -20,7 +19,6 @@ import java.io.IOException
 import java.io.InputStreamReader
 import java.io.BufferedReader
 import java.io.OutputStreamWriter
-import java.lang.reflect.Type
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.MalformedURLException
@@ -249,16 +247,6 @@ object Util {
         } catch (e: MalformedURLException) {
             throw RuntimeException("Failed to parse web interface URL", e)
         }
-    }
-
-    /**
-     * Returns a deep copy of object.
-     *
-     * This method uses Gson and only works with objects that can be converted with Gson.
-     */
-    fun <T> deepCopy(obj: T, type: Type): T {
-        val gson = Gson()
-        return gson.fromJson(gson.toJson(obj, type), type)
     }
 
     /**

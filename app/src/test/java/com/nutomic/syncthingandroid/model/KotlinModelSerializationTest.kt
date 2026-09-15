@@ -1,21 +1,30 @@
 package com.nutomic.syncthingandroid.model
 
-import com.google.gson.Gson
+import com.nutomic.syncthingandroid.util.deepCopy
+import com.nutomic.syncthingandroid.util.json as jsonCodec
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Round-trip smoke tests proving that the Kotlin-converted model classes keep
- * Gson field-name and default-value behaviour identical to the former Java beans.
+ * Round-trip smoke tests proving that the model classes keep their JSON field names,
+ * default values and persisted-state compatibility after the Gson -> kotlinx.serialization
+ * migration.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-class KotlinModelGsonTest {
+class KotlinModelSerializationTest {
 
     companion object {
         private const val FOLDER_JSON = "{" +
@@ -44,22 +53,18 @@ class KotlinModelGsonTest {
 
     @Test
     fun folder_deserializesAllFields() {
-        val folder = Gson().fromJson(FOLDER_JSON, Folder::class.java)
-        assertNotNull(folder)
+        val folder = jsonCodec.decodeFromString<Folder>(FOLDER_JSON)
         assertEquals("camera", folder.id)
         assertEquals("Camera", folder.label)
         assertEquals("/storage/emulated/0/DCIM/Camera", folder.path)
         assertEquals("sendreceive", folder.type)
-        assertNotNull(folder.getSharedWithDevices())
         assertEquals(1, folder.getDeviceCount())
         assertEquals("ABC123", folder.getSharedWithDevices()[0].deviceID)
     }
 
     @Test
     fun folder_missingOptionalFields_keepsKotlinDefaults() {
-        // Mirrors the former Java bean defaults.
-        val folder = Gson().fromJson("{\"id\":\"x\"}", Folder::class.java)
-        assertNotNull(folder)
+        val folder = jsonCodec.decodeFromString<Folder>("{\"id\":\"x\"}")
         assertEquals("basic", folder.filesystemType)
         assertEquals(true, folder.fsWatcherEnabled)
         assertEquals(3600, folder.rescanIntervalS)
@@ -75,18 +80,16 @@ class KotlinModelGsonTest {
         folder.id = "camera"
         folder.label = ""
         folder.type = "sendreceive"
-        val json = Gson().toJson(folder)
+        val json = jsonCodec.encodeToString(folder)
         // Field names must match what Syncthing's REST API expects.
-        assertNotNull(json)
-        assertEquals(true, json.contains("\"id\":\"camera\""))
-        assertEquals(true, json.contains("\"rescanIntervalS\":3600"))
-        assertEquals(true, json.contains("\"fsWatcherDelayS\":10.0"))
+        assertTrue(json.contains("\"id\":\"camera\""))
+        assertTrue(json.contains("\"rescanIntervalS\":3600"))
+        assertTrue(json.contains("\"fsWatcherDelayS\":10.0"))
     }
 
     @Test
     fun device_deserializesAllFields() {
-        val device = Gson().fromJson(DEVICE_JSON, Device::class.java)
-        assertNotNull(device)
+        val device = jsonCodec.decodeFromString<Device>(DEVICE_JSON)
         assertEquals("ABCDEFG-1234567", device.deviceID)
         assertEquals("Pixel", device.name)
         assertNotNull(device.addresses)
@@ -97,8 +100,7 @@ class KotlinModelGsonTest {
 
     @Test
     fun device_missingOptionalFields_keepsKotlinDefaults() {
-        val device = Gson().fromJson("{\"deviceID\":\"x\"}", Device::class.java)
-        assertNotNull(device)
+        val device = jsonCodec.decodeFromString<Device>("{\"deviceID\":\"x\"}")
         assertEquals("metadata", device.compression)
         assertEquals(false, device.introducer)
         assertEquals(false, device.paused)
@@ -111,8 +113,7 @@ class KotlinModelGsonTest {
     @Test
     fun config_deserializesNestedModels() {
         // Fully qualified: clashes with org.robolectric.annotation.Config.
-        val config = Gson().fromJson(CONFIG_JSON, com.nutomic.syncthingandroid.model.Config::class.java)
-        assertNotNull(config)
+        val config = jsonCodec.decodeFromString<com.nutomic.syncthingandroid.model.Config>(CONFIG_JSON)
         assertEquals(31, config.version)
         assertNotNull(config.devices)
         assertEquals(1, config.devices!!.size)
@@ -131,7 +132,7 @@ class KotlinModelGsonTest {
     @Test
     fun gui_addressNullFallback_keepsJavaBehaviour() {
         // The REST API may send "address": null, and webGuiUrl guards against it.
-        val gui = Gson().fromJson("{\"address\":null}", Gui::class.java)
+        val gui = jsonCodec.decodeFromString<Gui>("{\"address\":null}")
         assertNull(gui.address)
         assertEquals("", gui.bindAddress)
         assertEquals("", gui.bindPort)
@@ -139,24 +140,22 @@ class KotlinModelGsonTest {
 
     @Test
     fun gui_addressParsing() {
-        val gui = Gson().fromJson("{\"address\":\"0.0.0.0:8384\"}", Gui::class.java)
+        val gui = jsonCodec.decodeFromString<Gui>("{\"address\":\"0.0.0.0:8384\"}")
         assertEquals("0.0.0.0", gui.bindAddress)
         assertEquals("8384", gui.bindPort)
     }
 
     @Test
     fun connectionsAndStatus_deserialize() {
-        val connections = Gson().fromJson(
-            "{\"total\":{\"connected\":true,\"inBytesTotal\":100},\"connections\":{}}",
-            Connections::class.java
+        val connections = jsonCodec.decodeFromString<Connections>(
+            "{\"total\":{\"connected\":true,\"inBytesTotal\":100},\"connections\":{}}"
         )
         assertNotNull(connections.total)
         assertEquals(true, connections.total!!.connected)
         assertEquals(100L, connections.total!!.inBytesTotal)
 
-        val status = Gson().fromJson(
-            "{\"myID\":\"ABC\",\"urVersionMax\":3,\"discoveryEnabled\":true}",
-            SystemStatus::class.java
+        val status = jsonCodec.decodeFromString<SystemStatus>(
+            "{\"myID\":\"ABC\",\"urVersionMax\":3,\"discoveryEnabled\":true}"
         )
         assertEquals("ABC", status.myID)
         assertEquals(3, status.urVersionMax)
@@ -166,44 +165,42 @@ class KotlinModelGsonTest {
 
     @Test
     fun eventAndDiskEvent_deserialize() {
-        val event = Gson().fromJson(
-            "{\"id\":5,\"type\":\"DeviceConnected\",\"data\":{\"id\":\"XYZ\"}}",
-            Event::class.java
+        val event = jsonCodec.decodeFromString<Event>(
+            "{\"id\":5,\"type\":\"DeviceConnected\",\"data\":{\"id\":\"XYZ\"}}"
         )
         assertEquals(5, event.id)
         assertEquals("DeviceConnected", event.type)
         assertNotNull(event.data)
-        assertEquals("XYZ", event.data!!["id"])
+        assertEquals("XYZ", event.data!!["id"]?.jsonPrimitive?.contentOrNull)
 
-        val diskEvent = Gson().fromJson(
-            "{\"id\":1,\"type\":\"LocalChangeDetected\",\"data\":{\"action\":\"added\",\"path\":\"/a/b\"}}",
-            DiskEvent::class.java
+        val diskEvent = jsonCodec.decodeFromString<DiskEvent>(
+            "{\"id\":1,\"type\":\"LocalChangeDetected\",\"data\":{\"action\":\"added\",\"path\":\"/a/b\"}}"
         )
         assertEquals(1L, diskEvent.id)
         assertEquals("LocalChangeDetected", diskEvent.type)
-        assertNotNull(diskEvent.data)
-        assertEquals("added", diskEvent.data!!.action)
+        assertEquals("added", diskEvent.data.action)
     }
 
     @Test
-    fun deepCopyRoundTrip_usedByLocalAndRemoteCompletion() {
-        // Util.deepCopy relies on Gson toJson/fromJson round-trips.
+    fun deepCopyRoundTrip_usedByRestApi() {
         val folder = Folder()
         folder.id = "f1"
         folder.label = "F1"
         folder.addDevice(Device())
-        val json = Gson().toJson(folder)
-        val copy = Gson().fromJson(json, Folder::class.java)
+        val copy = deepCopy(folder)
         assertEquals("f1", copy.id)
         assertEquals("F1", copy.label)
         assertEquals(1, copy.getSharedWithDevices().size)
+
+        // Mutating the copy must not affect the original.
+        copy.label = "Changed"
+        assertEquals("F1", folder.label)
     }
 
     @Test
     fun folderStatus_deserializesAllFields() {
-        val status = Gson().fromJson(
-            "{\"globalBytes\":100,\"inSyncBytes\":50,\"state\":\"syncing\",\"pullErrors\":2}",
-            FolderStatus::class.java
+        val status = jsonCodec.decodeFromString<FolderStatus>(
+            "{\"globalBytes\":100,\"inSyncBytes\":50,\"state\":\"syncing\",\"pullErrors\":2}"
         )
         assertEquals(100L, status.globalBytes)
         assertEquals(50L, status.inSyncBytes)
@@ -213,7 +210,7 @@ class KotlinModelGsonTest {
 
     @Test
     fun folderStatus_missingFields_keepDefaults() {
-        val status = Gson().fromJson("{}", FolderStatus::class.java)
+        val status = jsonCodec.decodeFromString<FolderStatus>("{}")
         assertEquals("idle", status.state)
         assertEquals("", status.error)
         assertEquals(0L, status.globalBytes)
@@ -221,14 +218,14 @@ class KotlinModelGsonTest {
     }
 
     @Test
-    fun cachedFolderStatus_gsonRoundTrip() {
-        // Util.deepCopy() round-trips this class via Gson (LocalCompletion.getFolderStatus).
-        val cached = CachedFolderStatus()
-        cached.completion = 42.0
-        cached.paused = true
-        cached.lastItemFinishedItem = "file.txt"
-        cached.discoveredConflictFiles = arrayOf("a.sync-conflict-1.txt")
-        val copy = Gson().fromJson(Gson().toJson(cached), CachedFolderStatus::class.java)
+    fun cachedFolderStatus_serializationRoundTrip() {
+        val cached = CachedFolderStatus(
+            completion = 42.0,
+            paused = true,
+            lastItemFinishedItem = "file.txt",
+            discoveredConflictFiles = arrayOf("a.sync-conflict-1.txt"),
+        )
+        val copy = jsonCodec.decodeFromString<CachedFolderStatus>(jsonCodec.encodeToString(cached))
         assertEquals(42.0, copy.completion, 0.001)
         assertEquals(true, copy.paused)
         assertEquals("file.txt", copy.lastItemFinishedItem)
@@ -238,9 +235,8 @@ class KotlinModelGsonTest {
 
     @Test
     fun completionInfo_deserializes() {
-        val info = Gson().fromJson(
-            "{\"completion\":55.5,\"globalBytes\":1000,\"needBytes\":450,\"remoteState\":\"idle\"}",
-            CompletionInfo::class.java
+        val info = jsonCodec.decodeFromString<CompletionInfo>(
+            "{\"completion\":55.5,\"globalBytes\":1000,\"needBytes\":450,\"remoteState\":\"idle\"}"
         )
         assertEquals(55.5, info.completion, 0.001)
         assertEquals(1000.0, info.globalBytes, 0.001)
@@ -250,7 +246,7 @@ class KotlinModelGsonTest {
 
     @Test
     fun completionInfo_missingFields_keepDefaults() {
-        val info = Gson().fromJson("{}", CompletionInfo::class.java)
+        val info = jsonCodec.decodeFromString<CompletionInfo>("{}")
         assertEquals("unknown", info.remoteState)
         assertEquals(0.0, info.completion, 0.001)
         assertEquals(0L, info.sequence)
@@ -258,9 +254,8 @@ class KotlinModelGsonTest {
 
     @Test
     fun defaults_deserializesNested() {
-        val defaults = Gson().fromJson(
-            "{\"device\":{\"deviceID\":\"ABC\"},\"folder\":{\"id\":\"f\"},\"ignores\":{\"line\":[\"!*.tmp\"]}}",
-            Defaults::class.java
+        val defaults = jsonCodec.decodeFromString<Defaults>(
+            "{\"device\":{\"deviceID\":\"ABC\"},\"folder\":{\"id\":\"f\"},\"ignores\":{\"line\":[\"!*.tmp\"]}}"
         )
         assertEquals("ABC", defaults.device!!.deviceID)
         assertEquals("f", defaults.folder!!.id)
@@ -271,8 +266,8 @@ class KotlinModelGsonTest {
 
     @Test
     fun deviceStat_deserializes() {
-        val stat = Gson().fromJson(
-            "{\"lastSeen\":\"2026-01-01T00:00:00Z\"}", DeviceStat::class.java
+        val stat = jsonCodec.decodeFromString<DeviceStat>(
+            "{\"lastSeen\":\"2026-01-01T00:00:00Z\"}"
         )
         assertEquals("2026-01-01T00:00:00Z", stat.lastSeen)
         assertEquals("", DeviceStat().lastSeen)
@@ -280,8 +275,8 @@ class KotlinModelGsonTest {
 
     @Test
     fun discoveredDevice_deserializes() {
-        val device = Gson().fromJson(
-            "{\"addresses\":[\"tcp4://192.168.178.10:40001\"]}", DiscoveredDevice::class.java
+        val device = jsonCodec.decodeFromString<DiscoveredDevice>(
+            "{\"addresses\":[\"tcp4://192.168.178.10:40001\"]}"
         )
         assertNotNull(device.addresses)
         assertEquals(1, device.addresses!!.size)
@@ -291,8 +286,8 @@ class KotlinModelGsonTest {
 
     @Test
     fun folderIgnoreList_deserializes() {
-        val list = Gson().fromJson(
-            "{\"expanded\":[\"foo\"],\"ignore\":[\"!foo\",\"/bar\"]}", FolderIgnoreList::class.java
+        val list = jsonCodec.decodeFromString<FolderIgnoreList>(
+            "{\"expanded\":[\"foo\"],\"ignore\":[\"!foo\",\"/bar\"]}"
         )
         assertEquals(1, list.expanded!!.size)
         assertEquals("foo", list.expanded!![0])
@@ -302,8 +297,8 @@ class KotlinModelGsonTest {
 
     @Test
     fun ignoredFolder_deserializes() {
-        val folder = Gson().fromJson(
-            "{\"id\":\"f1\",\"label\":\"L\",\"time\":\"2026-01-01T00:00:00Z\"}", IgnoredFolder::class.java
+        val folder = jsonCodec.decodeFromString<IgnoredFolder>(
+            "{\"id\":\"f1\",\"label\":\"L\",\"time\":\"2026-01-01T00:00:00Z\"}"
         )
         assertEquals("f1", folder.id)
         assertEquals("L", folder.label)
@@ -312,7 +307,7 @@ class KotlinModelGsonTest {
 
     @Test
     fun ignores_deserializes() {
-        val ignores = Gson().fromJson("{\"line\":[\"//c\",\"!*.jpg\"]}", Ignores::class.java)
+        val ignores = jsonCodec.decodeFromString<Ignores>("{\"line\":[\"//c\",\"!*.jpg\"]}")
         assertNotNull(ignores.line)
         assertEquals(2, ignores.line!!.size)
         assertEquals("!*.jpg", ignores.line!![1])
@@ -321,10 +316,9 @@ class KotlinModelGsonTest {
 
     @Test
     fun options_deserializesAllFields() {
-        val options = Gson().fromJson(
+        val options = jsonCodec.decodeFromString<Options>(
             "{\"listenAddresses\":[\"default\"],\"localAnnouncePort\":21027," +
-                "\"urAccepted\":-1,\"minHomeDiskFree\":{\"value\":2.0,\"unit\":\"GB\"}}",
-            Options::class.java
+                "\"urAccepted\":-1,\"minHomeDiskFree\":{\"value\":2.0,\"unit\":\"GB\"}}"
         )
         assertNotNull(options.listenAddresses)
         assertEquals("default", options.listenAddresses!![0])
@@ -337,7 +331,7 @@ class KotlinModelGsonTest {
 
     @Test
     fun options_missingFields_keepDefaults() {
-        val options = Gson().fromJson("{}", Options::class.java)
+        val options = jsonCodec.decodeFromString<Options>("{}")
         assertEquals(true, options.globalAnnounceEnabled)
         assertEquals(60, options.reconnectionIntervalS)
         assertEquals("https://data.syncthing.net/newdata", options.urURL)
@@ -348,31 +342,29 @@ class KotlinModelGsonTest {
 
     @Test
     fun options_usageReportingLogic() {
-        val accepted = Gson().fromJson("{\"urAccepted\":3}", Options::class.java)
+        val accepted = jsonCodec.decodeFromString<Options>("{\"urAccepted\":3}")
         assertEquals(true, accepted.isUsageReportingAccepted(3))
         assertEquals(true, accepted.isUsageReportingDecided(3))
         assertEquals(false, accepted.isUsageReportingAccepted(2))
 
-        val denied = Gson().fromJson("{\"urAccepted\":-1}", Options::class.java)
+        val denied = jsonCodec.decodeFromString<Options>("{\"urAccepted\":-1}")
         assertEquals(false, denied.isUsageReportingAccepted(3))
         assertEquals(true, denied.isUsageReportingDecided(3))
 
-        val undecided = Gson().fromJson("{}", Options::class.java)
+        val undecided = jsonCodec.decodeFromString<Options>("{}")
         assertEquals(false, undecided.isUsageReportingDecided(3))
     }
 
     @Test
     fun pendingDeviceAndFolder_deserialize() {
-        val device = Gson().fromJson(
-            "{\"time\":\"2026-01-01T00:00:00Z\",\"name\":\"Pixel\",\"address\":\"tcp://1.2.3.4:22000\"}",
-            PendingDevice::class.java
+        val device = jsonCodec.decodeFromString<PendingDevice>(
+            "{\"time\":\"2026-01-01T00:00:00Z\",\"name\":\"Pixel\",\"address\":\"tcp://1.2.3.4:22000\"}"
         )
         assertEquals("Pixel", device.name)
         assertEquals("tcp://1.2.3.4:22000", device.address)
 
-        val folder = Gson().fromJson(
-            "{\"label\":\"Camera\",\"receiveEncrypted\":true,\"remoteEncrypted\":false}",
-            PendingFolder::class.java
+        val folder = jsonCodec.decodeFromString<PendingFolder>(
+            "{\"label\":\"Camera\",\"receiveEncrypted\":true,\"remoteEncrypted\":false}"
         )
         assertEquals("Camera", folder.label)
         assertEquals(true, folder.receiveEncrypted)
@@ -381,24 +373,22 @@ class KotlinModelGsonTest {
 
     @Test
     fun remoteIgnoredDevice_deserializesWithDisplayNameFallback() {
-        val device = Gson().fromJson(
-            "{\"time\":\"2026-01-01T00:00:00Z\",\"deviceID\":\"ABCDEFG-1234567\",\"name\":\"\"}",
-            RemoteIgnoredDevice::class.java
+        val device = jsonCodec.decodeFromString<RemoteIgnoredDevice>(
+            "{\"time\":\"2026-01-01T00:00:00Z\",\"deviceID\":\"ABCDEFG-1234567\",\"name\":\"\"}"
         )
         assertEquals("", device.name)
         assertEquals("ABCDEFG", device.displayName)
 
-        val named = Gson().fromJson(
-            "{\"deviceID\":\"ABCDEFG-1234567\",\"name\":\"Pixel\"}", RemoteIgnoredDevice::class.java
+        val named = jsonCodec.decodeFromString<RemoteIgnoredDevice>(
+            "{\"deviceID\":\"ABCDEFG-1234567\",\"name\":\"Pixel\"}"
         )
         assertEquals("Pixel", named.displayName)
     }
 
     @Test
     fun sharedWithDevice_displayNameAndEncryptionPassword() {
-        val device = Gson().fromJson(
-            "{\"deviceID\":\"ABCDEFG-1234567\",\"introducedBy\":\"XYZ\",\"encryptionPassword\":\"s3cret\"}",
-            SharedWithDevice::class.java
+        val device = jsonCodec.decodeFromString<SharedWithDevice>(
+            "{\"deviceID\":\"ABCDEFG-1234567\",\"introducedBy\":\"XYZ\",\"encryptionPassword\":\"s3cret\"}"
         )
         assertEquals("ABCDEFG", device.displayName)
         assertEquals("XYZ", device.introducedBy)
@@ -409,15 +399,14 @@ class KotlinModelGsonTest {
 
     @Test
     fun systemStatus_nestedConnectionAndDialStatus() {
-        val status = Gson().fromJson(
+        val status = jsonCodec.decodeFromString<SystemStatus>(
             "{\"connectionServiceStatus\":{" +
                 "\"tcp://0.0.0.0:22000\":{\"error\":null," +
                 "\"lanAddresses\":[\"tcp://0.0.0.0:22000\"]," +
                 "\"wanAddresses\":[\"tcp://1.2.3.4:22000\"]}}," +
                 "\"lastDialStatus\":{" +
                 "\"tcp4://192.168.5.1\":{\"error\":\"dial timeout\"," +
-                "\"when\":\"2019-09-21T09:10:35Z\"}}}",
-            SystemStatus::class.java
+                "\"when\":\"2019-09-21T09:10:35Z\"}}}"
         )
         assertNotNull(status.connectionServiceStatus)
         val svc = status.connectionServiceStatus!!["tcp://0.0.0.0:22000"]!!
@@ -435,10 +424,9 @@ class KotlinModelGsonTest {
 
     @Test
     fun diskEventData_deserializesAllFields() {
-        val data = Gson().fromJson(
+        val data = jsonCodec.decodeFromString<DiskEventData>(
             "{\"action\":\"modified\",\"folder\":\"camera\",\"folderID\":\"camera\",\"label\":\"Camera\"," +
-                "\"modifiedBy\":\"ABCDEFG\",\"path\":\"/a/b.jpg\",\"type\":\"file\"}",
-            DiskEventData::class.java
+                "\"modifiedBy\":\"ABCDEFG\",\"path\":\"/a/b.jpg\",\"type\":\"file\"}"
         )
         assertEquals("modified", data.action)
         assertEquals("camera", data.folder)
@@ -450,17 +438,16 @@ class KotlinModelGsonTest {
     }
 
     @Test
-    fun event_dataMapRoundTrip() {
-        // Event.data round-trips through Gson as a reflective field (kotlin Map since phase12).
+    fun event_dataObjectRoundTrip() {
+        // Event.data is an arbitrary JSON object; it must survive encode/decode unchanged.
         val event = Event()
         event.id = 7
         event.type = "FolderSummary"
-        val data = HashMap<String, Any>()
-        data["folder"] = "camera"
-        event.data = data
-        val copy = Gson().fromJson(Gson().toJson(event), Event::class.java)
+        event.data = buildJsonObject { put("folder", "camera") }
+
+        val copy = jsonCodec.decodeFromString<Event>(jsonCodec.encodeToString(event))
         assertEquals(7, copy.id)
         assertEquals("FolderSummary", copy.type)
-        assertEquals("camera", copy.data!!["folder"])
+        assertEquals("camera", copy.data!!["folder"]?.jsonPrimitive?.contentOrNull)
     }
 }

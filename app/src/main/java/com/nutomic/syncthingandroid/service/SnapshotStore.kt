@@ -2,10 +2,11 @@ package com.nutomic.syncthingandroid.service
 
 import android.content.SharedPreferences
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.nutomic.syncthingandroid.util.json as jsonCodec
 
 import java.io.IOException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 
 /**
  * Persistence boundary for the last verified forwarded snapshot.
@@ -54,20 +55,16 @@ internal interface SnapshotStore {
 /** SharedPreferences adapter retained for compatibility with existing persisted state. */
 internal class SharedPreferencesSnapshotStore(
     private val prefs: SharedPreferences,
-    private val gson: Gson,
 ) : SnapshotStore {
 
     companion object {
         const val STATE_PREFIX = "saf_bridge_state_"
     }
 
-    private val stateType = object : TypeToken<Map<String, SafBridge.NodeInfo>>() {}.type
-
     override fun loadBridge(bridgeId: String): Map<String, SafBridge.NodeInfo> {
         val json = prefs.getString(STATE_PREFIX + bridgeId, null) ?: return emptyMap()
         return try {
-            val parsed: Map<String, SafBridge.NodeInfo>? = gson.fromJson(json, stateType)
-            parsed ?: throw IOException("Snapshot is null")
+            jsonCodec.decodeFromString(json)
         } catch (e: Exception) {
             throw IOException("Corrupt state pref for $bridgeId", e)
         }
@@ -85,7 +82,7 @@ internal class SharedPreferencesSnapshotStore(
         snapshot: Map<String, SafBridge.NodeInfo>,
     ): Boolean {
         return prefs.edit()
-            .putString(STATE_PREFIX + bridgeId, gson.toJson(snapshot))
+            .putString(STATE_PREFIX + bridgeId, jsonCodec.encodeToString(snapshot))
             .commit()
     }
 

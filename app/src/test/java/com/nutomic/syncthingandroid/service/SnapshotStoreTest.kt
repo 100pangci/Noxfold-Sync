@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 
-import com.google.gson.Gson
-
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -25,7 +23,7 @@ class SnapshotStoreTest {
     fun setUp() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         prefs.edit().clear().commit()
-        store = SharedPreferencesSnapshotStore(prefs, Gson())
+        store = SharedPreferencesSnapshotStore(prefs)
     }
 
     @Test
@@ -46,6 +44,31 @@ class SnapshotStoreTest {
         assertEquals(2, store.loadBridge("bridge").size)
         assertTrue(store.clearBridge("bridge"))
         assertTrue(store.loadBridge("bridge").isEmpty())
+    }
+
+    @Test
+    fun loadBridge_readsStateWrittenByTheFormerGsonImplementation() {
+        // Field names and null-omission must stay compatible across the
+        // Gson -> kotlinx.serialization migration (persisted installs upgrade in place).
+        val legacyJson = "{\"docs\":{\"isDir\":true,\"size\":0,\"mtime\":0}," +
+            "\"docs/a.txt\":{\"isDir\":false,\"size\":3,\"mtime\":7,\"contentHash\":\"a\"}}"
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putString(SharedPreferencesSnapshotStore.STATE_PREFIX + "legacy", legacyJson)
+            .commit()
+
+        val loaded = store.loadBridge("legacy")
+        assertEquals(2, loaded.size)
+        assertEquals(SafBridge.NodeInfo(isDir = true), loaded["docs"])
+        assertEquals(
+            SafBridge.NodeInfo(isDir = false, size = 3, mtime = 7, contentHash = "a"),
+            loaded["docs/a.txt"],
+        )
+
+        // Re-encoding must produce the same JSON the Gson implementation wrote.
+        assertTrue(store.replaceFullSnapshot("legacy", loaded))
+        val rewritten = PreferenceManager.getDefaultSharedPreferences(context)
+            .getString(SharedPreferencesSnapshotStore.STATE_PREFIX + "legacy", null)
+        assertEquals(legacyJson, rewritten)
     }
 
     @Test
