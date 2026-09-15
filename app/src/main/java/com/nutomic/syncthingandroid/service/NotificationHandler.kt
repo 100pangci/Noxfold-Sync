@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.util.Log
@@ -22,68 +21,57 @@ import com.nutomic.syncthingandroid.activities.MainActivity
 import com.nutomic.syncthingandroid.activities.OnboardingActivity
 import com.nutomic.syncthingandroid.service.SyncthingService.State
 
-class NotificationHandler(context: Context, private val preferences: SharedPreferences) {
+class NotificationHandler(context: Context) {
 
     private val context: Context = context
     private val notificationManager: NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val persistentChannel: NotificationChannel?
-    private val persistentChannelWaiting: NotificationChannel?
-    private val infoChannel: NotificationChannel?
+    private val persistentChannel: NotificationChannel
+    private val persistentChannelWaiting: NotificationChannel
+    private val infoChannel: NotificationChannel
 
     private var lastNotificationText: String? = null
     private var lastStartForegroundService = false
     private var appShutdownInProgress = false
 
     init {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            persistentChannel = NotificationChannel(
-                CHANNEL_PERSISTENT, context.getString(R.string.notifications_persistent_channel),
-                NotificationManager.IMPORTANCE_MIN
-            ).also {
-                it.enableLights(false)
-                it.enableVibration(false)
-                it.setSound(null, null)
-                it.setShowBadge(false)
-                it.lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
-                notificationManager.createNotificationChannel(it)
-            }
+        persistentChannel = NotificationChannel(
+            CHANNEL_PERSISTENT, context.getString(R.string.notifications_persistent_channel),
+            NotificationManager.IMPORTANCE_MIN
+        ).also {
+            it.enableLights(false)
+            it.enableVibration(false)
+            it.setSound(null, null)
+            it.setShowBadge(false)
+            it.lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
+            notificationManager.createNotificationChannel(it)
+        }
 
-            persistentChannelWaiting = NotificationChannel(
-                CHANNEL_PERSISTENT_WAITING, context.getString(R.string.notification_persistent_waiting_channel),
-                NotificationManager.IMPORTANCE_MIN
-            ).also {
-                it.enableLights(false)
-                it.enableVibration(false)
-                it.setSound(null, null)
-                it.setShowBadge(false)
-                it.lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
-                notificationManager.createNotificationChannel(it)
-            }
+        persistentChannelWaiting = NotificationChannel(
+            CHANNEL_PERSISTENT_WAITING, context.getString(R.string.notification_persistent_waiting_channel),
+            NotificationManager.IMPORTANCE_MIN
+        ).also {
+            it.enableLights(false)
+            it.enableVibration(false)
+            it.setSound(null, null)
+            it.setShowBadge(false)
+            it.lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
+            notificationManager.createNotificationChannel(it)
+        }
 
-            infoChannel = NotificationChannel(
-                CHANNEL_INFO, context.getString(R.string.notifications_other_channel),
-                NotificationManager.IMPORTANCE_LOW
-            ).also {
-                it.enableVibration(false)
-                it.setSound(null, null)
-                it.setShowBadge(true)
-                notificationManager.createNotificationChannel(it)
-            }
-        } else {
-            persistentChannel = null
-            persistentChannelWaiting = null
-            infoChannel = null
+        infoChannel = NotificationChannel(
+            CHANNEL_INFO, context.getString(R.string.notifications_other_channel),
+            NotificationManager.IMPORTANCE_LOW
+        ).also {
+            it.enableVibration(false)
+            it.setSound(null, null)
+            it.setShowBadge(true)
+            notificationManager.createNotificationChannel(it)
         }
     }
 
-    private fun getNotificationBuilder(channel: NotificationChannel?): NotificationCompat.Builder {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && channel != null) {
-            return NotificationCompat.Builder(context, channel.id)
-        } else {
-            //noinspection deprecation
-            return NotificationCompat.Builder(context)
-        }
+    private fun getNotificationBuilder(channel: NotificationChannel): NotificationCompat.Builder {
+        return NotificationCompat.Builder(context, channel.id)
     }
 
     /**
@@ -98,32 +86,20 @@ class NotificationHandler(context: Context, private val preferences: SharedPrefe
                                      persistNotificationDetails: Boolean,
                                      onlineDeviceCount: Int,
                                      totalSyncCompletion: Int) {
-        val startServiceOnBoot = preferences.getBoolean(Constants.PREF_START_SERVICE_ON_BOOT, false)
         val currentServiceState = service.currentState
         val syncthingRunning = currentServiceState == SyncthingService.State.ACTIVE ||
                 currentServiceState == SyncthingService.State.STARTING
         var startForegroundService = false
         if (!appShutdownInProgress) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                /**
-                 * Android 7 and lower:
-                 * The app may run in background and monitor run conditions even if it is not
-                 * running as a foreground service. For that reason, we can use a normal
-                 * notification if syncthing is DISABLED.
-                 */
-                startForegroundService = startServiceOnBoot || syncthingRunning
-            } else {
-                /**
-                 * Android 8+:
-                 * Always use startForeground.
-                 * This makes sure the app is not killed, and we don't miss run condition events.
-                 * On Android 8+, this behaviour is mandatory to receive broadcasts.
-                 * https://stackoverflow.com/a/44505719/1837158
-                 * Foreground priority requires a notification so this ensures that we either have a
-                 * "default" or "low_priority" notification, but not "none".
-                 */
-                startForegroundService = true
-            }
+            /**
+             * Always use startForeground.
+             * This makes sure the app is not killed, and we don't miss run condition events.
+             * On Android 8+, this behaviour is mandatory to receive broadcasts.
+             * https://stackoverflow.com/a/44505719/1837158
+             * Foreground priority requires a notification so this ensures that we either have a
+             * "default" or "low_priority" notification, but not "none".
+             */
+            startForegroundService = true
         }
 
         // Check if we have to stopForeground.

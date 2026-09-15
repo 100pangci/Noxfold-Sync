@@ -5,18 +5,15 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Resources
 import android.graphics.drawable.Icon
-import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 
-import androidx.annotation.RequiresApi
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.util.Util
 
-@RequiresApi(api = Build.VERSION_CODES.N)
 class QuickSettingsTileForce : TileService() {
 
     // Nullable on purpose (mirrors the Java original): TileService can be destroyed without

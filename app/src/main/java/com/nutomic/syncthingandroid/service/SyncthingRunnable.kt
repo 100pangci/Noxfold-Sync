@@ -6,7 +6,6 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiManager.MulticastLock
-import android.os.Build
 import android.util.Log
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
@@ -431,14 +430,9 @@ class SyncthingRunnable(private val context: Context, command: Command) : Runnab
             }
         }
 
-        // Optimize memory usage for older devices.
-        val gogc = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            75
-        } else {
-            100          // GO default
-        }
-        logV("Setting env var: [GOGC]=[$gogc]")
-        targetEnv["GOGC"] = gogc.toString()
+        // Go's default GC target percentage.
+        logV("Setting env var: [GOGC]=[100]")
+        targetEnv["GOGC"] = "100"
 
         putCustomEnvironmentVariables(targetEnv, preferences)
         return targetEnv

@@ -33,8 +33,7 @@ import com.nutomic.syncthingandroid.util.FileUtils
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Locale
+import java.time.OffsetDateTime
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -278,15 +277,12 @@ private fun List<DiskEvent>.toRecentChanges(
     localDeviceId: String,
     thisDeviceLabel: String,
 ): List<RecentChange> {
-    // Reused across the whole list rather than rebuilt per row. SimpleDateFormat is not thread-safe,
-    // which is fine: this only ever runs on the main dispatcher.
-    val timestampParser = SimpleDateFormat(RFC3339_PATTERN, Locale.US)
     return withoutUselessEvents().map { event ->
         RecentChange(
             filename = fileNameOf(event.data.path),
             folderPath = "[${event.data.label}]${File.separator}${parentPathOf(event.data.path)}",
             modifiedByName = resolveDeviceName(event.data.modifiedBy, devices, localDeviceId, thisDeviceLabel),
-            timeMillis = timestampParser.parseEpochMillisOrNull(event.time),
+            timeMillis = parseEpochMillisOrNull(event.time),
             rawTime = event.time,
             type = ChangeType.of(event.data.type),
             action = ChangeAction.of(event.data.action),
@@ -296,28 +292,18 @@ private fun List<DiskEvent>.toRecentChanges(
     }
 }
 
-private const val RFC3339_PATTERN = "yyyy-MM-dd'T'HH:mm:ssZ"
-
 /**
  * Parses a Syncthing timestamp (RFC 3339, e.g. `2018-10-29T15:18:52.6183215+01:00`) to epoch millis,
  * or null if it does not parse.
  *
- * `SimpleDateFormat` is used rather than `java.time` because minSdk is 23 and core library desugaring
- * is not enabled, so `OffsetDateTime` would be unavailable on API 23–25. It needs the input normalised
- * first: the fractional seconds dropped (it cannot handle 7–9 digits), and the offset reduced from
- * `+01:00` to the RFC 822 `+0100` that the `Z` pattern expects.
+ * `OffsetDateTime` accepts fractional seconds with 0–9 digits and both `Z` and `+01:00` offsets, so
+ * the old SimpleDateFormat normalisation is no longer needed. minSdk 26 makes java.time available
+ * without core library desugaring.
  */
-private fun SimpleDateFormat.parseEpochMillisOrNull(raw: String): Long? {
+private fun parseEpochMillisOrNull(raw: String): Long? {
     if (raw.isEmpty()) return null
-    val normalised = raw
-        .replace(FRACTIONAL_SECONDS, "")
-        .let { if (it.endsWith("Z")) it.dropLast(1) + "+0000" else it }
-        .replace(OFFSET_WITH_COLON, "$1$2")
-    return runCatching { parse(normalised)?.time }.getOrNull()
+    return runCatching { OffsetDateTime.parse(raw).toInstant().toEpochMilli() }.getOrNull()
 }
-
-private val FRACTIONAL_SECONDS = Regex("\\.\\d+")
-private val OFFSET_WITH_COLON = Regex("([+-]\\d{2}):(\\d{2})$")
 
 /**
  * Drops disk events that are not useful to display:

@@ -319,12 +319,9 @@ class ConfigXml(private val context: Context) {
         val gui = getGuiElement()
             ?: throw OpenConfigException()
 
-        // Platform-specific: Force REST API and Web UI access to use TLS 1.2 or not.
-        val forceHttps = Constants.osSupportsTLS12()
-        if (!gui.hasAttribute("tls") ||
-            gui.getAttribute("tls").toBoolean() != forceHttps
-        ) {
-            gui.setAttribute("tls", forceHttps.toString())
+        // Force REST API and Web UI access to use TLS 1.2 (supported by all minSdk 26 devices).
+        if (gui.getAttribute("tls").toBoolean() != true) {
+            gui.setAttribute("tls", "true")
             changed = true
         }
 

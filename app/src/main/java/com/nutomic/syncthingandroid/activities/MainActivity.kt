@@ -3,7 +3,6 @@ package com.nutomic.syncthingandroid.activities
 import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
-import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
@@ -86,11 +85,7 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
         // SyncthingService needs to be started from this activity as the user
         // can directly launch this activity from the recent activity switcher.
         val serviceIntent = Intent(this, SyncthingService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        startForegroundService(serviceIntent)
 
         handleExitIntent(intent)
 

@@ -99,7 +99,7 @@ The knowledge base (FAQ, battery optimization, vendor-specific background restri
 | Optional root | libsu (su detection, root shell, storage ownership hand-back) |
 | Build | Gradle (Kotlin DSL) + Version Catalog, JDK 21, AGP 9.x |
 
-- minSdk 23 (Android 6.0) / targetSdk 36 / compileSdk 37
+- minSdk 26 (Android 8.0) / targetSdk 36 / compileSdk 37
 
 ## Acknowledgments
 

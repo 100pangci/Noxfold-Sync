@@ -4,7 +4,6 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.res.Configuration
 import android.app.UiModeManager
-import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 
@@ -245,9 +244,8 @@ object Util {
      * Builds the web GUI URL from the given gui address (e.g. "127.0.0.1:8384").
      */
     fun buildWebGuiUrl(guiAddress: String): URL {
-        val urlProtocol = if (Constants.osSupportsTLS12()) "https" else "http"
         try {
-            return URL("$urlProtocol://$guiAddress")
+            return URL("https://$guiAddress")
         } catch (e: MalformedURLException) {
             throw RuntimeException("Failed to parse web interface URL", e)
         }
@@ -478,10 +476,6 @@ object Util {
      */
     fun formatDateTime(dateTime: String): String {
         // Convert dateTime to readable localized string.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return dateTime
-        }
-
         val parsedDateTime = ZonedDateTime.parse(dateTime)
         val zonedDateTime = parsedDateTime.withZoneSameInstant(ZoneId.systemDefault())
         val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
@@ -490,10 +484,6 @@ object Util {
 
     fun formatTime(dateTime: String): String {
         // Convert dateTime to readable localized string.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return dateTime
-        }
-
         val parsedDateTime = ZonedDateTime.parse(dateTime)
         val zonedDateTime = parsedDateTime.withZoneSameInstant(ZoneId.systemDefault())
         val formatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
@@ -504,11 +494,6 @@ object Util {
      * Converts local time to ZonedDateTime.
      */
     fun getLocalZonedDateTime(): String {
-        // Legacy devices below API 26 don't support java.time; return a fixed
-        // fallback timestamp as they cannot display the local time anyway.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return "2021-02-11T22:11:29.356Z"
-        }
         return ZonedDateTime.ofLocal(LocalDateTime.now(), ZoneId.of("UTC"), ZoneOffset.UTC)
             .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
     }

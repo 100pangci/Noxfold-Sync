@@ -99,7 +99,7 @@ python3 scripts/install_minimum_android_sdk_prerequisites.py
 | 可选 Root | libsu（su 检测、root shell、存储所有权交还） |
 | 构建 | Gradle (Kotlin DSL) + Version Catalog, JDK 21, AGP 9.x |
 
-- minSdk 23 (Android 6.0) / targetSdk 36 / compileSdk 37
+- minSdk 26 (Android 8.0) / targetSdk 36 / compileSdk 37
 
 ## 致谢
 

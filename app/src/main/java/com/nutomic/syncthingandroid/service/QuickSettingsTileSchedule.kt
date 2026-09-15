@@ -5,19 +5,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.SharedPreferences
-import android.os.Build
 import android.os.IBinder
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.util.Util
 
-@RequiresApi(api = Build.VERSION_CODES.N)
 class QuickSettingsTileSchedule : TileService(), ServiceConnection, SyncthingService.OnServiceStateChangeListener {
 
     // Nullable on purpose (mirrors the Java original): TileService can be destroyed without

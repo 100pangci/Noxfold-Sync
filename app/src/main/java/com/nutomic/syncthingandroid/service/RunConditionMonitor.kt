@@ -11,7 +11,6 @@ import android.content.res.Resources
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkInfo
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
@@ -146,12 +145,8 @@ class RunConditionMonitor(
         /**
          * Register broadcast receivers.
          */
-        // NetworkReceiver (legacy API 23 fallback; API 24+ uses a default network callback instead).
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            ReceiverManager.registerReceiver(context, NetworkReceiver(), IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
-        } else {
-            registerNetworkCallback()
-        }
+        // Default network callback; supersedes the deprecated CONNECTIVITY_ACTION broadcast.
+        registerNetworkCallback()
 
         // BatteryReceiver
         val batteryFilter = IntentFilter().apply {
@@ -278,19 +273,7 @@ class RunConditionMonitor(
         }
     }
 
-    private inner class NetworkReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (ConnectivityManager.CONNECTIVITY_ACTION == intent.action) {
-                updateShouldRunDecision()
-            }
-        }
-    }
-
     private fun registerNetworkCallback() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            // Should never happen; the caller only registers on API 24+.
-            return
-        }
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         if (cm == null) {
             Log.e(TAG, "registerNetworkCallback: getSystemService(CONNECTIVITY_SERVICE) unexpectedly returned NULL.")
@@ -910,94 +893,20 @@ class RunConditionMonitor(
     }
 
     private fun isFlightMode(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            getActiveNetworkCapabilities() == null
-        } else {
-            isFlightModeLegacy()
-        }
+        return getActiveNetworkCapabilities() == null
     }
 
     private fun isMeteredNetworkConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val nc = getActiveNetworkCapabilities()
-            if (nc == null) {
-                // In flight mode.
-                return false
-            }
-            if (!nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-                // No network connection.
-                return false
-            }
-            if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
-                /**
-                 * We treat Wi-Fi and ETHERNET as "Wi-Fi" connection.
-                 * Assume ETHERNET connection is un-metered to allow syncing on
-                 * Android TV or VirtualBox ETHERNET connection.
-                 */
-                return false
-            }
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            return cm != null && cm.isActiveNetworkMetered
-        }
-        return isMeteredNetworkConnectionLegacy()
-    }
-
-    private fun isMobileDataConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)
-        }
-        return isMobileDataConnectionLegacy()
-    }
-
-    private fun isRoamingNetworkConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val nc = getActiveNetworkCapabilities()
-            if (nc == null || !nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
-                !nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-            ) {
-                // Not on a (connected) mobile data network.
-                return false
-            }
-            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-            return tm != null && tm.isNetworkRoaming
-        }
-        return isRoamingNetworkConnectionLegacy()
-    }
-
-    private fun isWifiOrEthernetConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-        }
-        return isWifiOrEthernetConnectionLegacy()
-    }
-
-    /**
-     * Legacy API 23 helpers, kept because [ConnectivityManager.registerDefaultNetworkCallback]
-     * requires API 24.
-     */
-    @Suppress("DEPRECATION")
-    private fun isFlightModeLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        val ni: NetworkInfo? = cm?.activeNetworkInfo
-        return ni == null
-    }
-
-    @Suppress("DEPRECATION")
-    private fun isMeteredNetworkConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
+        val nc = getActiveNetworkCapabilities()
+        if (nc == null) {
             // In flight mode.
             return false
         }
-        if (!ni.isConnected) {
+        if (!nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
             // No network connection.
             return false
         }
-        if (ni.type == ConnectivityManager.TYPE_ETHERNET) {
+        if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
             /**
              * We treat Wi-Fi and ETHERNET as "Wi-Fi" connection.
              * Assume ETHERNET connection is un-metered to allow syncing on
@@ -1005,66 +914,30 @@ class RunConditionMonitor(
              */
             return false
         }
-        return cm.isActiveNetworkMetered
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        return cm != null && cm.isActiveNetworkMetered
     }
 
-    @Suppress("DEPRECATION")
-    private fun isMobileDataConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
-            // In flight mode.
-            return false
-        }
-        if (!ni.isConnected) {
-            // No network connection.
-            return false
-        }
-        return when (ni.type) {
-            ConnectivityManager.TYPE_BLUETOOTH,
-            ConnectivityManager.TYPE_MOBILE,
-            ConnectivityManager.TYPE_MOBILE_DUN,
-            ConnectivityManager.TYPE_MOBILE_HIPRI -> true
-            else -> false
-        }
+    private fun isMobileDataConnection(): Boolean {
+        return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+            hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)
     }
 
-    @Suppress("DEPRECATION")
-    private fun isRoamingNetworkConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
-            // In flight mode.
+    private fun isRoamingNetworkConnection(): Boolean {
+        val nc = getActiveNetworkCapabilities()
+        if (nc == null || !nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
+            !nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+        ) {
+            // Not on a (connected) mobile data network.
             return false
         }
-        if (!ni.isConnected) {
-            // No network connection.
-            return false
-        }
-        return ni.isRoaming
+        val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        return tm != null && tm.isNetworkRoaming
     }
 
-    @Suppress("DEPRECATION")
-    private fun isWifiOrEthernetConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
-            // In flight mode.
-            return false
-        }
-        if (!ni.isConnected) {
-            // No network connection.
-            return false
-        }
-        return when (ni.type) {
-            ConnectivityManager.TYPE_WIFI,
-            ConnectivityManager.TYPE_WIMAX,
-            ConnectivityManager.TYPE_ETHERNET -> true
-            else -> false
-        }
+    private fun isWifiOrEthernetConnection(): Boolean {
+        return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
     }
 
     @Suppress("DEPRECATION")
