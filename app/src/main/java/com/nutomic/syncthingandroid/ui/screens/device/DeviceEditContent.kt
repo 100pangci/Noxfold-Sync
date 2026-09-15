@@ -82,6 +82,7 @@ internal fun DeviceEditContent(
     onOpenSyncConditions: () -> Unit,
     onOpenFolderEdit: () -> Unit,
     onRefreshDiscovery: () -> Unit,
+    onRefreshGroupOptions: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -102,6 +103,7 @@ internal fun DeviceEditContent(
             onShowQr = onShowQr,
             onCompressionClick = onCompressionClick,
             onRefreshDiscovery = onRefreshDiscovery,
+            onRefreshGroupOptions = onRefreshGroupOptions,
         )
         // ---- Toggles ----
         DeviceTogglesCard(
@@ -135,6 +137,7 @@ private fun DeviceIdentityCard(
     onShowQr: () -> Unit,
     onCompressionClick: () -> Unit,
     onRefreshDiscovery: () -> Unit,
+    onRefreshGroupOptions: () -> Unit,
 ) {
     var nameText by remember(device) { mutableStateOf(device.name ?: "") }
     var addressesText by remember(device) { mutableStateOf(displayableAddresses(device)) }
@@ -279,7 +282,8 @@ private fun DeviceIdentityCard(
             groupOptions = holder.groupOptions,
             onGroupChanged = { value ->
                 onDeviceMutate { it.group = value }
-            }
+            },
+            onExpand = onRefreshGroupOptions,
         )
 
         // ---- Addresses ----

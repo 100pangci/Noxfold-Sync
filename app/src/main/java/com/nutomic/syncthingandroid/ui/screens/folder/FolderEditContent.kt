@@ -27,6 +27,7 @@ internal fun FolderEditContent(
     onShowVersioningDialog: () -> Unit,
     onOpenSyncConditions: () -> Unit,
     onOpenDeviceEdit: () -> Unit,
+    onRefreshGroupOptions: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface) {
         androidx.compose.foundation.layout.Column(
@@ -44,6 +45,7 @@ internal fun FolderEditContent(
                 onPickAdvancedPath = onPickAdvancedPath,
                 onShowFolderTypeDialog = onShowFolderTypeDialog,
                 configVersion = holder.configVersion,
+                onRefreshGroupOptions = onRefreshGroupOptions,
             )
             FolderEditBottomSection(
                 holder = holder,
