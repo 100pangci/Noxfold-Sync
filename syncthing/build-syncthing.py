@@ -495,7 +495,9 @@ for target in BUILD_TARGETS:
         'BUILD_HOST': repository,
         'BUILD_USER': 'reproducible-build',
         'CGO_ENABLED': '1',
-        'EXTRA_LDFLAGS': '-checklinkname=0',
+        # -s strips the Go symbol table in addition to the DWARF info removed by
+        # build.go's default -w, cutting several MB from each native core.
+        'EXTRA_LDFLAGS': '-checklinkname=0 -s',
         'GOPATH': module_dir,
         'GO111MODULE': 'on',
         'SOURCE_DATE_EPOCH': '0',

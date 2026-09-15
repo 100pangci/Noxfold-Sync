@@ -120,10 +120,20 @@ android {
             isDebuggable = true
             isJniDebuggable = true
             isMinifyEnabled = false
+            // Keep local debug builds small: the universal debug APK otherwise packs all
+            // four native cores (~79 MB). Add more ABIs here when testing on other devices.
+            ndk {
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
             signingConfig = signingConfigs.getByName("localDebug").takeIf { it.storeFile != null }
         }
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.runCatching { getByName("release") }
                 .getOrNull()
                 .takeIf { it?.storeFile != null }
