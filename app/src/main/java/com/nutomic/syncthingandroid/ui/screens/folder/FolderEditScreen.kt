@@ -44,6 +44,7 @@ import com.nutomic.syncthingandroid.SyncthingApp
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
@@ -109,6 +110,20 @@ fun FolderEditScreen(
             context, holder, isCreate, folderId, folderLabel, receiveEncrypted,
             deviceId, notificationId, api, configRouter, navigator, preferences,
         )
+    }
+    // Group name suggestions are loaded independently of the one-shot draft
+    // init: the init used to fill them only at its tail, after the 450ms defer,
+    // so an interrupted init / reused draft left the picker with no options at
+    // all (only "ungrouped" + the current group). Rebases on the REST config
+    // once the service is up; opening the picker refreshes them again.
+    LaunchedEffect(holder, apiConfigLoaded) {
+        holder.groupOptions = loadFolderGroupOptions(configRouter, api)
+    }
+    // Refresh action handed to the group picker: called on every expand so the
+    // list reflects moves made while the draft was alive (or heals an empty
+    // list left behind by an interrupted init).
+    val refreshGroupOptions: () -> Unit = {
+        scope.launch { holder.groupOptions = loadFolderGroupOptions(configRouter, api) }
     }
     // Cancel the consent notification once the service is connected. On a
     // cold start from the notification tap the service is not yet bound while
@@ -249,6 +264,7 @@ fun FolderEditScreen(
             onShowPullOrderDialog = { showPullOrderDialog = true },
             onShowVersioningDialog = { showVersioningDialog = true },
             onMarkDirty = { holder.needsUpdate = true },
+            onRefreshGroupOptions = refreshGroupOptions,
         )
     }
     // ---- Dialogs ----
@@ -315,6 +331,7 @@ private fun FolderEditBody(
     onShowPullOrderDialog: () -> Unit,
     onShowVersioningDialog: () -> Unit,
     onMarkDirty: () -> Unit,
+    onRefreshGroupOptions: () -> Unit,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
@@ -376,6 +393,7 @@ private fun FolderEditBody(
                     )
                 },
                 onOpenDeviceEdit = { navigator.openDeviceEdit(null, true) },
+                onRefreshGroupOptions = onRefreshGroupOptions,
             )
         }
         if (holder.isSaving) {
@@ -496,10 +514,11 @@ private suspend fun initFolderEditState(
     preferences: SharedPreferences,
 ) {
     if (holder.folder != null) return
-    // One folder snapshot serves both the edit lookup and the group name
-    // suggestions; loaded off the main thread in either mode. A corrupt
+    // Folder snapshot for the edit lookup; loaded off the main thread. A corrupt
     // config.xml must not block "create" (the draft does not need it) and
     // "edit" then simply falls back to its existing "not found" handling.
+    // The group name suggestions use their own loader (loadFolderGroupOptions),
+    // deliberately NOT this snapshot: they must survive an interrupted init.
     val folderList = try {
         withContext(Dispatchers.IO) { configRouter.getFolders(api) }
     } catch (e: ConfigXml.OpenConfigException) {
@@ -532,10 +551,6 @@ private suspend fun initFolderEditState(
             holder.ignoreListText = list.ignore?.joinToString("\n") ?: ""
         }
     }
-    holder.groupOptions = folderList
-        .mapNotNull { it.group?.trim()?.takeIf { group -> group.isNotEmpty() } }
-        .distinct()
-        .sorted()
     holder.customSyncConditions = if (isCreate) false else preferences.getBoolean(
         Constants.DYN_PREF_OBJECT_CUSTOM_SYNC_CONDITIONS(
             Constants.PREF_OBJECT_PREFIX_FOLDER + holder.folder!!.id
@@ -554,6 +569,33 @@ private suspend fun initFolderEditState(
             deviceID = devId
         })
         holder.needsUpdate = true
+    }
+}
+
+/**
+ * Distinct, sorted group names in use by the given folders: the suggestions
+ * offered by the folder group picker.
+ */
+private fun folderGroupSuggestions(folders: List<Folder>): List<String> =
+    folders
+        .mapNotNull { it.group?.trim()?.takeIf { group -> group.isNotEmpty() } }
+        .distinct()
+        .sorted()
+
+/**
+ * Loads the folder group picker suggestions off the main thread. Runs when the
+ * editor opens (independently of the draft init) and again whenever the picker
+ * is opened, so an interrupted init or a stale draft can never leave the picker
+ * without options.
+ */
+internal suspend fun loadFolderGroupOptions(
+    configRouter: ConfigRouter,
+    api: RestApi?,
+): List<String> = withContext(Dispatchers.IO) {
+    try {
+        folderGroupSuggestions(configRouter.getFolders(api))
+    } catch (e: ConfigXml.OpenConfigException) {
+        emptyList()
     }
 }
 

@@ -53,6 +53,7 @@ internal fun FolderEditTopSection(
     onPickAdvancedPath: () -> Unit,
     onShowFolderTypeDialog: () -> Unit,
     configVersion: Int = 0,
+    onRefreshGroupOptions: () -> Unit,
 ) {
     var label by remember(folder) { mutableStateOf(folder.label ?: "") }
     var idText by remember(folder) { mutableStateOf(folder.id ?: "") }
@@ -79,7 +80,8 @@ internal fun FolderEditTopSection(
             onGroupChanged = { value ->
                 folder.group = value
                 onMarkDirty()
-            }
+            },
+            onExpand = onRefreshGroupOptions,
         )
         if (isCreate) {
             OutlinedTextField(

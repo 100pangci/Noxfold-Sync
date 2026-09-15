@@ -25,8 +25,8 @@ internal class FolderEditStateHolder {
 
     /**
      * Group names currently used by the configured folders, offered as
-     * dropdown suggestions in the group picker. Filled once when the draft
-     * is initialized.
+     * dropdown suggestions in the group picker. Loaded when the editor opens
+     * and refreshed every time the picker is opened (see loadFolderGroupOptions).
      */
     var groupOptions by mutableStateOf<List<String>>(emptyList())
 

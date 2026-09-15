@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -38,6 +39,7 @@ import com.nutomic.syncthingandroid.model.Device
 import com.nutomic.syncthingandroid.model.DiscoveredDevice
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
+import com.nutomic.syncthingandroid.service.RestApi
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
 import com.nutomic.syncthingandroid.ui.appPreferences
@@ -53,6 +55,7 @@ import com.nutomic.syncthingandroid.util.ConfigXml
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal data class FolderShareState(
@@ -80,8 +83,8 @@ internal class DeviceEditStateHolder {
 
     /**
      * Group names currently used by the configured devices, offered as
-     * dropdown suggestions in the group picker. Filled once when the draft
-     * is initialized.
+     * dropdown suggestions in the group picker. Loaded when the editor opens
+     * and refreshed every time the picker is opened (see loadDeviceGroupOptions).
      */
     var groupOptions by mutableStateOf<List<String>>(emptyList())
 }
@@ -122,6 +125,7 @@ fun DeviceEditScreen(
     val configRouter = remember { ConfigRouter(context) }
     val preferences = context.appPreferences()
     val prefExpertMode = preferences.getBoolean(Constants.PREF_EXPERT_MODE, false)
+    val scope = rememberCoroutineScope()
 
     // Draft state is store-backed (NOT remember/rememberSaveable): Nav3 disposes this
     // entry while the sync conditions route is on top, and the draft has to survive
@@ -159,16 +163,20 @@ fun DeviceEditScreen(
         }
         device = d
         syncHolderFromDevice(holder, d, context, isCreate, preferences)
-        // Group name suggestions = the groups of all configured remote
-        // devices; a corrupt config.xml must not block the editor here.
-        holder.groupOptions = try {
-            withContext(Dispatchers.IO) { configRouter.getDevices(api, false) }
-                .mapNotNull { it.group?.trim()?.takeIf(String::isNotEmpty) }
-                .distinct()
-                .sorted()
-        } catch (e: ConfigXml.OpenConfigException) {
-            emptyList()
-        }
+    }
+    // Group name suggestions are loaded outside the one-shot draft init: the
+    // init used to fill them only at its tail, so an interrupted init / reused
+    // draft left the picker with no options at all (only "ungrouped" + the
+    // current group). Rebases on the REST config once the service is up;
+    // opening the picker refreshes them again.
+    LaunchedEffect(holder, apiConfigLoaded) {
+        holder.groupOptions = loadDeviceGroupOptions(configRouter, api)
+    }
+    // Refresh action handed to the group picker: called on every expand so the
+    // list reflects moves made while the draft was alive (or heals an empty
+    // list left behind by an interrupted init).
+    val refreshGroupOptions: () -> Unit = {
+        scope.launch { holder.groupOptions = loadDeviceGroupOptions(configRouter, api) }
     }
 
     var discoveredDevices by remember { mutableStateOf<Map<String, DiscoveredDevice>?>(null) }
@@ -358,6 +366,7 @@ fun DeviceEditScreen(
                         },
                         onOpenFolderEdit = { navigator.openFolderEdit(null, true) },
                         onRefreshDiscovery = { discoveryRefresh++ },
+                        onRefreshGroupOptions = refreshGroupOptions,
                     )
                 } else {
                     Text(
@@ -438,4 +447,31 @@ private fun syncHolderFromDevice(
             Constants.PREF_OBJECT_PREFIX_DEVICE + device.deviceID
         ), false
     )
+}
+
+/**
+ * Distinct, sorted group names in use by the given devices: the suggestions
+ * offered by the device group picker.
+ */
+private fun deviceGroupSuggestions(devices: List<Device>): List<String> =
+    devices
+        .mapNotNull { it.group?.trim()?.takeIf { group -> group.isNotEmpty() } }
+        .distinct()
+        .sorted()
+
+/**
+ * Loads the device group picker suggestions off the main thread. Runs when the
+ * editor opens (independently of the draft init) and again whenever the picker
+ * is opened, so an interrupted init or a stale draft can never leave the picker
+ * without options.
+ */
+internal suspend fun loadDeviceGroupOptions(
+    configRouter: ConfigRouter,
+    api: RestApi?,
+): List<String> = withContext(Dispatchers.IO) {
+    try {
+        deviceGroupSuggestions(configRouter.getDevices(api, false))
+    } catch (e: ConfigXml.OpenConfigException) {
+        emptyList()
+    }
 }

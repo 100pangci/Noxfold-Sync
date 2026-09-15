@@ -36,6 +36,11 @@ import com.nutomic.syncthingandroid.R
  * the other entries of the same kind, plus a "+" button that creates a new
  * group by typing its name. The group value is a plain config attribute
  * ("" = ungrouped), so "creating" a group merely assigns the new name.
+ *
+ * [onExpand] is invoked every time the dropdown opens so the caller can
+ * refresh the suggestions from the live configuration: the snapshot passed in
+ * [groupOptions] may be empty (editor opened before the config was readable)
+ * or stale (groups changed while the draft was alive).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +49,7 @@ fun GroupPickerRow(
     currentGroup: String,
     groupOptions: List<String>,
     onGroupChanged: (String) -> Unit,
+    onExpand: (() -> Unit)? = null,
 ) {
     var groupText by remember(currentGroup) { mutableStateOf(currentGroup) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -66,7 +72,12 @@ fun GroupPickerRow(
         ) {
             ExposedDropdownMenuBox(
                 expanded = menuExpanded,
-                onExpandedChange = { menuExpanded = it }
+                onExpandedChange = { expanded ->
+                    menuExpanded = expanded
+                    if (expanded) {
+                        onExpand?.invoke()
+                    }
+                }
             ) {
                 OutlinedTextField(
                     value = groupText,
