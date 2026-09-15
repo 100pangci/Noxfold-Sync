@@ -18,7 +18,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.telephony.TelephonyManager
 import android.util.Log
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.util.JobUtils
@@ -73,12 +72,6 @@ class RunConditionMonitor(
          */
         private const val DEFAULT_SYNC_DURATION_MINUTES = "5"
         private const val DEFAULT_SLEEP_INTERVAL_MINUTES = "60"
-
-        const val ACTION_SYNC_TRIGGER_FIRED = ".service.RunConditionMonitor.ACTION_SYNC_TRIGGER_FIRED"
-
-        const val ACTION_UPDATE_SHOULDRUN_DECISION = ".service.RunConditionMonitor.ACTION_UPDATE_SHOULDRUN_DECISION"
-
-        const val EXTRA_BEGIN_ACTIVE_TIME_WINDOW = ".service.RunConditionMonitor.BEGIN_ACTIVE_TIME_WINDOW"
     }
 
     interface OnShouldRunChangedListener {
@@ -119,10 +112,6 @@ class RunConditionMonitor(
     private var triggeredSyncSleepIntervalS: Int = 10
 
     private var syncStatusObserverHandle: Any? = null
-
-    private var syncTriggerReceiver: SyncTriggerReceiver? = null
-
-    private var updateShouldRunDecisionReceiver: UpdateShouldRunDecisionReceiver? = null
 
     /**
      * API 24+: Replaces the deprecated CONNECTIVITY_ACTION broadcast.
@@ -171,15 +160,18 @@ class RunConditionMonitor(
             }
         )
 
-        // SyncTriggerReceiver
-        val localBroadcastManager = LocalBroadcastManager.getInstance(context)
-        syncTriggerReceiver = SyncTriggerReceiver().also {
-            localBroadcastManager.registerReceiver(it, IntentFilter(ACTION_SYNC_TRIGGER_FIRED))
-        }
-
-        // UpdateShouldRunDecisionReceiver
-        updateShouldRunDecisionReceiver = UpdateShouldRunDecisionReceiver().also {
-            localBroadcastManager.registerReceiver(it, IntentFilter(ACTION_UPDATE_SHOULDRUN_DECISION))
+        // In-process run condition events (sync trigger + should-run re-evaluation).
+        monitorScope.launch {
+            RunConditionEvents.events.collect { event ->
+                when (event) {
+                    is RunConditionEvents.Event.SyncTriggerFired ->
+                        onSyncTriggerFired(event.beginActiveTimeWindow)
+                    RunConditionEvents.Event.UpdateShouldRunDecision -> {
+                        logV("UpdateShouldRunDecision event received")
+                        updateShouldRunDecision()
+                    }
+                }
+            }
         }
 
         if (!Constants.isRunningOnEmulator()) {
@@ -244,17 +236,6 @@ class RunConditionMonitor(
         // NetworkCallback (API 24+)
         unregisterNetworkCallback()
 
-        // SyncTriggerReceiver
-        syncTriggerReceiver?.let {
-            LocalBroadcastManager.getInstance(context).unregisterReceiver(it)
-        }
-        syncTriggerReceiver = null
-
-        // UpdateShouldRunDecisionReceiver
-        updateShouldRunDecisionReceiver?.let {
-            LocalBroadcastManager.getInstance(context).unregisterReceiver(it)
-        }
-        updateShouldRunDecisionReceiver = null
         ReceiverManager.unregisterAllReceivers(context)
     }
 
@@ -334,104 +315,94 @@ class RunConditionMonitor(
         }
     }
 
-    private inner class SyncTriggerReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            runAllowedStopScheduled = false
-            val extraBeginActiveTimeWindow = intent.getBooleanExtra(EXTRA_BEGIN_ACTIVE_TIME_WINDOW, false)
-            logV("SyncTriggerReceiver: onReceive, extraBeginActiveTimeWindow=$extraBeginActiveTimeWindow")
+    private fun onSyncTriggerFired(extraBeginActiveTimeWindow: Boolean) {
+        runAllowedStopScheduled = false
+        logV("SyncTrigger: beginActiveTimeWindow=$extraBeginActiveTimeWindow")
 
-            val prefRunOnTimeSchedule = preferences.getBoolean(Constants.PREF_RUN_ON_TIME_SCHEDULE, false)
-            if (!prefRunOnTimeSchedule) {
-                /**
-                 * The feature is currently disabled.
-                 * Reschedule the job to see if the user turned on this feature in the meantime.
-                 */
-                timeConditionMatch = false
-                JobUtils.cancelAllScheduledJobs(context)
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncSleepIntervalS,
-                    true
-                )
-                return
-            }
-
-            // extraBeginActiveTimeWindow determines whether syncthing should start or stop
-            if (extraBeginActiveTimeWindow) {
-                // We should immediately start SyncthingNative for TRIGGERED_SYNC_DURATION_SECS.
-                timeConditionMatch = true
-                JobUtils.cancelAllScheduledJobs(context)
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncDurationS,
-                    false
-                )
-                runAllowedStopScheduled = true
-            } else {
-                /**
-                 * Toggle the "digital input" for this condition as the condition change is
-                 * triggered by a time schedule.
-                 */
-                timeConditionMatch = false
-                /**
-                 * If Syncthing is running and the last run was more than triggeredSyncSleepIntervalS ago,
-                 * this stop job might actually start Syncthing (resp. leave it running) because
-                 * timeConditionMatch is switched to true if last run was more than triggeredSyncSleepIntervalS ago.
-                 * So in this case we put a new (fake) last run time slightly less than triggeredSyncSleepIntervalS ago.
-                 * If Syncthing really is stopped (which it should) then the wrong time gets
-                 * corrected immediately
-                 */
-                val lastRunTimeMillis = preferences.getLong(Constants.PREF_LAST_RUN_TIME, 0)
-                if (lastDeterminedShouldRun &&
-                    SystemClock.elapsedRealtime() - lastRunTimeMillis > triggeredSyncSleepIntervalS * 1000
-                ) {
-                    preferences.edit()
-                        .putLong(
-                            Constants.PREF_LAST_RUN_TIME,
-                            SystemClock.elapsedRealtime() - triggeredSyncSleepIntervalS * 1000 + 60 * 1000
-                        )
-                        .apply()
-                }
-            }
-            updateShouldRunDecision()
-
+        val prefRunOnTimeSchedule = preferences.getBoolean(Constants.PREF_RUN_ON_TIME_SCHEDULE, false)
+        if (!prefRunOnTimeSchedule) {
             /**
-             * Reschedule the job.
-             * If we are within a "SyncthingNative shouldn't run" time frame,
-             * let the receiver fire and change to "SyncthingNative should run" after
-             * triggeredSyncSleepIntervalS seconds elapsed.
-             * If we are within a "SyncthingNative should run" time frame,
-             * the change to "SyncthingNative shouldn't run" after
-             * TRIGGERED_SYNC_DURATION_SECS seconds elapsed should actually
-             * be scheduled inside updateShouldRunDecision(), but this might
-             * not always be the case.
-             * Thus we schedule an additional change to "SyncthingNative shouldn't run"
-             * after TRIGGERED_SYNC_DURATION_SECS seconds elapsed, but without
-             * cancelling other jobs. This should only serve as a backup job and
-             * will not fire if the job inside updateShouldRunDecision() is
-             * scheduled correctly.
+             * The feature is currently disabled.
+             * Reschedule the job to see if the user turned on this feature in the meantime.
              */
-            if (!runAllowedStopScheduled && !lastDeterminedShouldRun) {
-                JobUtils.cancelAllScheduledJobs(context)
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncSleepIntervalS,
-                    true
-                )
-            } else {
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncDurationS,
-                    false
-                )
+            timeConditionMatch = false
+            JobUtils.cancelAllScheduledJobs(context)
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncSleepIntervalS,
+                true
+            )
+            return
+        }
+
+        // extraBeginActiveTimeWindow determines whether syncthing should start or stop
+        if (extraBeginActiveTimeWindow) {
+            // We should immediately start SyncthingNative for TRIGGERED_SYNC_DURATION_SECS.
+            timeConditionMatch = true
+            JobUtils.cancelAllScheduledJobs(context)
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncDurationS,
+                false
+            )
+            runAllowedStopScheduled = true
+        } else {
+            /**
+             * Toggle the "digital input" for this condition as the condition change is
+             * triggered by a time schedule.
+             */
+            timeConditionMatch = false
+            /**
+             * If Syncthing is running and the last run was more than triggeredSyncSleepIntervalS ago,
+             * this stop job might actually start Syncthing (resp. leave it running) because
+             * timeConditionMatch is switched to true if last run was more than triggeredSyncSleepIntervalS ago.
+             * So in this case we put a new (fake) last run time slightly less than triggeredSyncSleepIntervalS ago.
+             * If Syncthing really is stopped (which it should) then the wrong time gets
+             * corrected immediately
+             */
+            val lastRunTimeMillis = preferences.getLong(Constants.PREF_LAST_RUN_TIME, 0)
+            if (lastDeterminedShouldRun &&
+                SystemClock.elapsedRealtime() - lastRunTimeMillis > triggeredSyncSleepIntervalS * 1000
+            ) {
+                preferences.edit()
+                    .putLong(
+                        Constants.PREF_LAST_RUN_TIME,
+                        SystemClock.elapsedRealtime() - triggeredSyncSleepIntervalS * 1000 + 60 * 1000
+                    )
+                    .apply()
             }
         }
-    }
+        updateShouldRunDecision()
 
-    private inner class UpdateShouldRunDecisionReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            logV("UpdateShouldRunDecisionReceiver: onReceive")
-            updateShouldRunDecision()
+        /**
+         * Reschedule the job.
+         * If we are within a "SyncthingNative shouldn't run" time frame,
+         * let the receiver fire and change to "SyncthingNative should run" after
+         * triggeredSyncSleepIntervalS seconds elapsed.
+         * If we are within a "SyncthingNative should run" time frame,
+         * the change to "SyncthingNative shouldn't run" after
+         * TRIGGERED_SYNC_DURATION_SECS seconds elapsed should actually
+         * be scheduled inside updateShouldRunDecision(), but this might
+         * not always be the case.
+         * Thus we schedule an additional change to "SyncthingNative shouldn't run"
+         * after TRIGGERED_SYNC_DURATION_SECS seconds elapsed, but without
+         * cancelling other jobs. This should only serve as a backup job and
+         * will not fire if the job inside updateShouldRunDecision() is
+         * scheduled correctly.
+         */
+        if (!runAllowedStopScheduled && !lastDeterminedShouldRun) {
+            JobUtils.cancelAllScheduledJobs(context)
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncSleepIntervalS,
+                true
+            )
+        } else {
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncDurationS,
+                false
+            )
         }
     }
 

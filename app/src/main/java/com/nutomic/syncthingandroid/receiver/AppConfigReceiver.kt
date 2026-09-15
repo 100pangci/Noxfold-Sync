@@ -3,13 +3,11 @@ package com.nutomic.syncthingandroid.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.util.Log
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 
 import com.nutomic.syncthingandroid.service.Constants
-import com.nutomic.syncthingandroid.service.RunConditionMonitor
+import com.nutomic.syncthingandroid.service.RunConditionEvents
 import com.nutomic.syncthingandroid.service.SyncthingService
 
 /**
@@ -60,9 +58,8 @@ class AppConfigReceiver : BroadcastReceiver() {
         editor.putInt(Constants.PREF_BTNSTATE_FORCE_START_STOP, newState)
         editor.apply()
 
-        // Notify {@link RunConditionMonitor} that the button's state changed.
-        val localBroadcastManager = LocalBroadcastManager.getInstance(context)
-        localBroadcastManager.sendBroadcast(Intent(RunConditionMonitor.ACTION_UPDATE_SHOULDRUN_DECISION))
+        // Notify RunConditionMonitor that the button's state changed.
+        RunConditionEvents.requestUpdateShouldRunDecision()
     }
 
     companion object {

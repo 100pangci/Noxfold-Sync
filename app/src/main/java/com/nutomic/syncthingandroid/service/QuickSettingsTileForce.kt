@@ -1,14 +1,12 @@
 package com.nutomic.syncthingandroid.service
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Resources
 import android.graphics.drawable.Icon
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 
 import com.nutomic.syncthingandroid.R
@@ -57,8 +55,7 @@ class QuickSettingsTileForce : TileService() {
         editor.putInt(Constants.PREF_BTNSTATE_FORCE_START_STOP, newState)
         editor.apply()
 
-        val localBroadcastManager = LocalBroadcastManager.getInstance(context!!)
-        localBroadcastManager.sendBroadcast(Intent(RunConditionMonitor.ACTION_UPDATE_SHOULDRUN_DECISION))
+        RunConditionEvents.requestUpdateShouldRunDecision()
 
         updateTileState(tile, newState)
         tile.updateTile()
