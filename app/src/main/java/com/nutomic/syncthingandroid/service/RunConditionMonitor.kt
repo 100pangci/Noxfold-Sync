@@ -33,24 +33,17 @@ import kotlinx.coroutines.launch
  *
  * This information is actively read on instance creation, and then updated from intents.
  *
- * Kotlin/coroutines port of the former Java implementation (phase4).
- *
- * Threading model: broadcast receivers registered with the system run on the main thread
- * and call [updateShouldRunDecision] synchronously, exactly like the Java original. The
- * asynchronously dispatched sources (default network callback, sync status observer,
- * delayed battery re-evaluation) hand off through [monitorScope] on
- * [Dispatchers.Main], which queues a runnable on the main looper - the same semantics the
- * old `Handler(Looper.getMainLooper()).post(...)` / `postDelayed(...)` calls had.
+ * Threading model: system broadcast receivers run on the main thread and call
+ * [updateShouldRunDecision] synchronously. The asynchronously dispatched sources (default
+ * network callback, sync status observer, delayed battery re-evaluation) hand off through
+ * [monitorScope] on [Dispatchers.Main], so every decision is evaluated on the main thread.
  *
  * [shouldRunFlow] and [runDecisionExplanationFlow] expose the last decision as observable
- * state for future Kotlin/Flow consumers; the legacy
- * [OnShouldRunChangedListener] / [OnSyncPreconditionChangedListener] callbacks keep
- * their signatures while Java callers (SyncthingService) are not yet migrated.
+ * state; the [OnShouldRunChangedListener] / [OnSyncPreconditionChangedListener] callbacks
+ * remain for the service.
  *
- * Intentional divergence from the Java implementation: [shutdown] cancels [monitorScope],
- * so pending delayed re-evaluations (e.g. a battery update scheduled 5s before shutdown)
- * no longer fire after the monitor is torn down. The old code kept the main-thread
- * handler alive and could invoke decision callbacks after shutdown.
+ * [shutdown] cancels [monitorScope], so pending delayed re-evaluations (e.g. a battery
+ * update scheduled 5s before shutdown) no longer fire after the monitor is torn down.
  */
 class RunConditionMonitor(
     private val context: Context,
@@ -531,7 +524,7 @@ class RunConditionMonitor(
     ): SyncConditionResult {
         val wifiWhitelistEnabled = preferences.getBoolean(prefNameUseWifiWhitelist, false)
         val whitelistedWifiSsids: Set<String> =
-            preferences.getStringSet(prefNameSelectedWhitelistSsid, HashSet()) ?: HashSet()
+            preferences.getStringSet(prefNameSelectedWhitelistSsid, hashSetOf()) ?: hashSetOf()
         return try {
             if (wifiWhitelistConditionMet(wifiWhitelistEnabled, whitelistedWifiSsids)) {
                 SyncConditionResult(true, "\n" + res.getString(R.string.reason_on_whitelisted_wifi))

@@ -23,7 +23,7 @@ class LocalCompletion(enableVerboseLog: Boolean) {
         val cachedFolderStatus: CachedFolderStatus,
     )
 
-    private val folderMap: MutableMap<String, FolderStatusEntry> = HashMap()
+    private val folderMap: MutableMap<String, FolderStatusEntry> = mutableMapOf()
 
     /**
      * Object that must be locked upon accessing folderMap.

@@ -1,7 +1,5 @@
 package com.nutomic.syncthingandroid.service
 
-import android.content.AsyncQueryHandler
-import android.content.ContentResolver
 import android.content.Context
 import android.content.SharedPreferences
 import android.media.MediaScannerConnection
@@ -40,11 +38,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 
 /**
- * Kotlin/coroutines replacement for the former Java [EventProcessor] (phase3).
- *
  * Run by the syncthing service to convert syncthing events into local state updates and
- * notifications. It polls [RestApi.getEvents] and waits for new events, preserving the old
- * polling semantics:
+ * notifications. It polls [RestApi.getEvents] and waits for new events with these semantics:
  *
  *  - The first poll happens one [EVENT_UPDATE_INTERVAL] after [start]; every afterwards poll
  *    is scheduled from the previous round's completion, so overlapping polls are impossible.
@@ -407,13 +402,14 @@ class EventPoller(
                 Log.i(TAG, "onItemFinished: MediaStore, Deleting file: $fullFilePath")
                 val contentUri = MediaStore.Files.getContentUri("external")
                 val resolver = context.contentResolver
-                LoggingAsyncQueryHandler(resolver).startDelete(
-                        0,                          // this will be passed to "onDeleteComplete#token"
-                        fullFilePath,               // this will be passed to "onDeleteComplete#cookie"
+                pollerScope.launch(Dispatchers.IO) {
+                    val deleted = resolver.delete(
                         contentUri,
                         MediaStore.Images.ImageColumns.DATA + " = ?",
                         arrayOf(fullFilePath)
-                )
+                    )
+                    logV("onItemFinished: MediaStore delete result=$deleted for $fullFilePath")
+                }
             }
             "update" -> {                       // file contents changed
                 Log.i(TAG, "onItemFinished: MediaScanner, Rescanning file: $fullFilePath")
@@ -470,13 +466,6 @@ class EventPoller(
     private fun onStateChanged(folderId: String?, newState: String?) {
         restApi.updateLocalFolderState(folderId, newState)
         // logV("onStateChanged: folder=[$folderId], newState=[$newState]")
-    }
-
-    private class LoggingAsyncQueryHandler(contentResolver: ContentResolver) :
-            AsyncQueryHandler(contentResolver) {
-        override fun onDeleteComplete(token: Int, cookie: Any?, result: Int) {
-            super.onUpdateComplete(token, cookie, result)
-        }
     }
 
     private fun shortenedFileAndFolder(path: String): String {

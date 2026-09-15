@@ -24,7 +24,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,7 +89,7 @@ fun StatusPage(
 
     // Overall sync completion is event-driven inside RestApi and cached as a
     // StateFlow (phase6b): collect it instead of polling the cache here.
-    val totalSyncCompletion = api?.totalSyncCompletion?.collectAsState()?.value ?: -1
+    val totalSyncCompletion = api?.totalSyncCompletion?.collectAsStateWithLifecycle()?.value ?: -1
 
     LaunchedEffect(serviceState, visible) {
         if (!visible) return@LaunchedEffect

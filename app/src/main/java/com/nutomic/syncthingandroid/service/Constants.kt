@@ -3,7 +3,6 @@ package com.nutomic.syncthingandroid.service
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.os.Build
-import android.text.TextUtils
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -296,8 +295,8 @@ object Constants {
      * Checks if the app is running on an Android emulator (AVD).
      */
     fun isRunningOnEmulator(): Boolean {
-        return !TextUtils.isEmpty(Build.MANUFACTURER) &&
-                !TextUtils.isEmpty(Build.MODEL) &&
+        return !Build.MANUFACTURER.isNullOrEmpty() &&
+                !Build.MODEL.isNullOrEmpty() &&
                         (
                             Build.MANUFACTURER == "Google" ||
                             Build.MANUFACTURER == "unknown"

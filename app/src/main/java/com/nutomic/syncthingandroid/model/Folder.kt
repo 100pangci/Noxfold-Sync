@@ -19,7 +19,7 @@ class Folder(
     var type: String = Constants.FOLDER_TYPE_SEND_RECEIVE,
     var fsWatcherEnabled: Boolean = true,
     var fsWatcherDelayS: Float = 10f,
-    private var devices: MutableList<SharedWithDevice> = ArrayList(),
+    private var devices: MutableList<SharedWithDevice> = mutableListOf(),
 
     /**
      * Folder rescan interval defaults to 3600s as it is the default in
@@ -81,7 +81,7 @@ class Folder(
     class Versioning(
         var type: String? = null,
         var cleanupIntervalS: Int = 0,
-        var params: MutableMap<String, String> = HashMap(),
+        var params: MutableMap<String, String> = mutableMapOf(),
         // Since v1.14.0
         var fsPath: String? = null,
         var fsType: String? = null,

@@ -3,7 +3,6 @@ package com.nutomic.syncthingandroid.util
 import android.content.Context
 import android.os.Build
 import androidx.preference.PreferenceManager
-import android.text.TextUtils
 import android.util.Log
 
 import com.nutomic.syncthingandroid.model.Device
@@ -82,8 +81,8 @@ class ConfigXml(private val context: Context) {
     }
 
     /**
-     * This should run within an AsyncTask as it can cause a full CPU load
-     * for more than 30 seconds on older phone hardware.
+     * This must run on a background thread: it can cause a full CPU load for more than
+     * 30 seconds on older phone hardware.
      */
     fun generateConfig() {
         // Create new secret keys and config.
@@ -95,7 +94,7 @@ class ConfigXml(private val context: Context) {
         // Set local device name.
         Log.i(TAG, "Starting syncthing to retrieve local device id.")
         val localDeviceID = getLocalDeviceIDandStoreToPref()
-        if (!TextUtils.isEmpty(localDeviceID)) {
+        if (!localDeviceID.isNullOrEmpty()) {
             changed = changeLocalDeviceName(localDeviceID) || changed
         }
 
@@ -158,14 +157,14 @@ class ConfigXml(private val context: Context) {
     private fun getLocalDeviceIDfromPref(): String {
         var localDeviceID = PreferenceManager.getDefaultSharedPreferences(context)
             .getString(Constants.PREF_LOCAL_DEVICE_ID, "")
-        if (TextUtils.isEmpty(localDeviceID)) {
+        if (localDeviceID.isNullOrEmpty()) {
             Log.d(TAG, "getLocalDeviceIDfromPref: Local device ID unavailable, trying to retrieve it from syncthing ...")
             try {
                 localDeviceID = getLocalDeviceIDandStoreToPref()
             } catch (e: SyncthingRunnable.ExecutableNotFoundException) {
                 Log.e(TAG, "getLocalDeviceIDfromPref: Failed to execute syncthing core")
             }
-            if (TextUtils.isEmpty(localDeviceID)) {
+            if (localDeviceID.isNullOrEmpty()) {
                 Log.e(TAG, "getLocalDeviceIDfromPref: Local device ID unavailable")
             }
         }
@@ -528,7 +527,7 @@ class ConfigXml(private val context: Context) {
                     device.deviceID = getAttributeOrDefault(elementDevice, "id", "")
 
                     // Exclude self.
-                    if (!TextUtils.isEmpty(device.deviceID) && device.deviceID != localDeviceID) {
+                    if (!device.deviceID.isNullOrEmpty() && device.deviceID != localDeviceID) {
                         device.introducedBy = getAttributeOrDefault(elementDevice, "introducedBy", device.introducedBy)
                         device.encryptionPassword = getContentOrDefault(elementDevice.getElementsByTagName("encryptionPassword").item(0), device.encryptionPassword)
                         folder.addDevice(device)
@@ -764,7 +763,7 @@ class ConfigXml(private val context: Context) {
                 file.createNewFile()
             }
             FileOutputStream(file).use { fileOutputStream ->
-                fileOutputStream.write(TextUtils.join("\n", ignore).toByteArray(StandardCharsets.UTF_8))
+                fileOutputStream.write(ignore.joinToString("\n").toByteArray(StandardCharsets.UTF_8))
                 fileOutputStream.flush()
             }
         } catch (e: IOException) {
@@ -838,7 +837,7 @@ class ConfigXml(private val context: Context) {
             device.ignoredFolders = ignoredFolders
 
             // Exclude self if requested.
-            val isLocalDevice = !TextUtils.isEmpty(device.deviceID) && device.deviceID == localDeviceID
+            val isLocalDevice = !device.deviceID.isNullOrEmpty() && device.deviceID == localDeviceID
             if (includeLocal || !isLocalDevice) {
                 devices.add(device)
             }
@@ -1179,7 +1178,7 @@ class ConfigXml(private val context: Context) {
         for (i in 0 until nodeFolders.length) {
             val r = nodeFolders.item(i) as Element
             val folderId = getAttributeOrDefault(r, "id", "")
-            if (!TextUtils.isEmpty(folderId) && folderId == Constants.syncthingCameraFolderId) {
+            if (!folderId.isNullOrEmpty() && folderId == Constants.syncthingCameraFolderId) {
                 folderAlreadyPresentInConfig = true
                 break
             }

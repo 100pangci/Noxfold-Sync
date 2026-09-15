@@ -23,7 +23,7 @@ class RemoteCompletion(enableVerboseLog: Boolean) {
         val folders: MutableMap<String, RemoteCompletionInfo>,
     )
 
-    private val deviceFolderMap: MutableMap<String, DeviceEntry> = HashMap()
+    private val deviceFolderMap: MutableMap<String, DeviceEntry> = mutableMapOf()
 
     /**
      * Object that must be locked upon accessing deviceFolderMap.
@@ -65,7 +65,7 @@ class RemoteCompletion(enableVerboseLog: Boolean) {
             for (device in newDevices) {
                 if (!deviceFolderMap.containsKey(device.deviceID)) {
                     logV("updateFromConfig: Add device '${getShortenedDeviceId(device.deviceID)}' to cache model")
-                    deviceFolderMap[device.deviceID] = DeviceEntry(Connection(), HashMap())
+                    deviceFolderMap[device.deviceID] = DeviceEntry(Connection(), mutableMapOf())
                 }
             }
 
@@ -197,7 +197,7 @@ class RemoteCompletion(enableVerboseLog: Boolean) {
             // Add device parent node if it does not exist.
             var entry = deviceFolderMap[deviceId]
             if (entry == null) {
-                entry = DeviceEntry(Connection(), HashMap())
+                entry = DeviceEntry(Connection(), mutableMapOf())
                 deviceFolderMap[deviceId] = entry
             }
             logV(
@@ -231,10 +231,10 @@ class RemoteCompletion(enableVerboseLog: Boolean) {
      */
     fun setDeviceStatus(deviceId: String, connection: Connection) {
         synchronized(deviceFolderMapLock) {
-            val existing = deviceFolderMap[deviceId] ?: DeviceEntry(Connection(), HashMap())
+            val existing = deviceFolderMap[deviceId] ?: DeviceEntry(Connection(), mutableMapOf())
             deviceFolderMap[deviceId] = DeviceEntry(
                 connection.copy(),
-                existing.folders.mapValuesTo(HashMap()) { it.value.copy() },
+                existing.folders.mapValuesTo(mutableMapOf()) { it.value.copy() },
             )
         }
     }

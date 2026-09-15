@@ -28,8 +28,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
- * Kotlin/coroutines replacement for the former Java SyncthingRunnable (phase5).
- *
  * Runs the syncthing binary from command line, and prints its output to logcat.
  *
  * Coroutines model: SyncthingService drives the main binary through the suspend [execute]
