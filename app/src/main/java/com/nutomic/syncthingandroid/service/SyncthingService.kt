@@ -21,6 +21,7 @@ import java.net.SocketTimeoutException
 import java.util.HashSet
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +34,20 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val TAG = "SyncthingService"
+
+/**
+ * Serializes one blocking binary lifecycle operation (startup stale-binary cleanup or
+ * shutdown kill/join) through [mutex] and executes it on [dispatcher].
+ *
+ * This preserves the semantics of the previous single-thread executor: a startup cleanup
+ * and a shutdown kill can never overlap, and multiple requests run in submission order
+ * (the coroutine [Mutex] serves waiters FIFO). [dispatcher] is injectable for tests.
+ */
+internal suspend fun <T> runBinaryWorkSerialized(
+    mutex: Mutex,
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    block: suspend () -> T,
+): T = mutex.withLock { withContext(dispatcher) { block() } }
 
 /**
  * Interval in ms, at which connections to the web gui are performed on first start
@@ -174,9 +189,11 @@ class SyncthingService : Service() {
     private var syncthingRunnableJob: Job? = null
 
     /**
-     * Serializes the blocking kill/join work of the native binary off the main thread.
-     * Shutdown and old-instance cleanup jobs run in FIFO order (the coroutine [Mutex] is
-     * fair); their continuations stay on [serviceScope] (main thread).
+     * Serializes the blocking binary lifecycle work off the main thread: startup
+     * stale-binary cleanup and shutdown kill/join both run through
+     * [runBinaryWorkSerialized]. This keeps the semantics of the previous single-thread
+     * executor - the two can never overlap and requests are served in FIFO order (the
+     * coroutine [Mutex] is fair). Continuations stay on [shutdownScope] (main thread).
      */
     private val shutdownMutex = Mutex()
 
@@ -638,7 +655,7 @@ class SyncthingService : Service() {
         // cleanup kills by process name, so spawning must wait for it to complete.
         binaryKillPending = true
         shutdownScope.launch {
-            val portOccupied = withContext(Dispatchers.IO) {
+            val portOccupied = runBinaryWorkSerialized(shutdownMutex) {
                 // Safety net for starts after a root-mode session (e.g. the app process was
                 // killed while the root-uid core was up): config and key material are root-owned
                 // with explicit 0600 modes and must be handed back to the app UID before the
@@ -918,16 +935,19 @@ class SyncthingService : Service() {
         syncthingRunnableJob = null
 
         if (runnable == null) {
-            onShutdownComplete?.invoke()
+            // Match the previous Handler.post(): queue the completion for the next main
+            // loop turn instead of running it inline. Dispatchers.Main (not Main.immediate)
+            // always enqueues, even when called from the main thread.
+            onShutdownComplete?.let { complete ->
+                shutdownScope.launch(Dispatchers.Main) { complete() }
+            }
             return
         }
 
         binaryKillPending = true
         shutdownScope.launch {
-            shutdownMutex.withLock {
-                withContext(Dispatchers.IO) {
-                    killBinaryAndAwaitExit(runnable, runnableJob)
-                }
+            runBinaryWorkSerialized(shutdownMutex) {
+                killBinaryAndAwaitExit(runnable, runnableJob)
             }
             binaryKillPending = false
             onShutdownComplete?.invoke()
