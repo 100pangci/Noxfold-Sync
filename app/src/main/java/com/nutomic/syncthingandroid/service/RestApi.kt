@@ -3,8 +3,6 @@ package com.nutomic.syncthingandroid.service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.preference.PreferenceManager
 import com.nutomic.syncthingandroid.SyncthingApp
@@ -54,6 +52,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -357,14 +356,14 @@ class RestApi(
 
         // Temporarily lower cleanupIntervalS for every folder to force cleanup after startup.
         setVersioningCleanupIntervalS(VERSIONING_CLEANUP_INTERVAL_S_TEMPORARY)
-        val resetCleanupIntervalHandler = Handler(Looper.getMainLooper())
-        resetCleanupIntervalHandler.postDelayed({
+        restScope.launch {
+            delay(VERSIONING_CLEANUP_RESET_DELAY_MS)
             if (hasShutdown) {
                 LogV("Skipping resetting the versioning cleanup interval due to hasShutdown == true")
-                return@postDelayed
+                return@launch
             }
             setVersioningCleanupIntervalS(VERSIONING_CLEANUP_INTERVAL_S_DEFAULT)
-        }, VERSIONING_CLEANUP_RESET_DELAY_MS)
+        }
     }
 
     fun reloadConfig() {

@@ -1,6 +1,5 @@
 package com.nutomic.syncthingandroid.service
 
-import android.os.Handler
 import android.util.Log
 
 import com.nutomic.syncthingandroid.service.SyncthingService.HttpsCertReplaceResult
@@ -12,14 +11,20 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
 /**
  * Owns the Web GUI HTTPS certificate replacement/reset logic:
  * stopping the binary, swapping or deleting the cert/key files, verifying that
  * Syncthing comes back online and rolling back to the previous certificate on failure.
  *
- * All lifecycle operations run on the service main thread, marshalled via [replaceHttpsCertificate].
+ * All lifecycle operations run on the main thread, marshalled via [replaceHttpsCertificate]
+ * onto the service scope (Dispatchers.Main.immediate).
  */
-class HttpsCertManager(private val service: SyncthingService, private val handler: Handler) {
+class HttpsCertManager(private val service: SyncthingService, private val scope: CoroutineScope) {
 
     /**
      * Replaces the Web GUI HTTPS certificate and key with the supplied PEM bytes, then restarts
@@ -32,7 +37,7 @@ class HttpsCertManager(private val service: SyncthingService, private val handle
      */
     fun replaceHttpsCertificate(certPem: ByteArray, keyPem: ByteArray,
                                 listener: OnHttpsCertReplaceResultListener) {
-        handler.post { doReplaceHttpsCertificate(certPem, keyPem, listener) }
+        scope.launch { doReplaceHttpsCertificate(certPem, keyPem, listener) }
     }
 
     /**
@@ -40,14 +45,17 @@ class HttpsCertManager(private val service: SyncthingService, private val handle
      * certificate at the next start, then restarts (with rollback on failure).
      */
     fun resetHttpsCertificate(listener: OnHttpsCertReplaceResultListener) {
-        handler.post { doResetHttpsCertificate(listener) }
+        scope.launch { doResetHttpsCertificate(listener) }
     }
 
     private fun doReplaceHttpsCertificate(certPem: ByteArray, keyPem: ByteArray,
                                           listener: OnHttpsCertReplaceResultListener) {
         // shutdown() defers while STARTING; wait it out so our file writes don't race the binary.
         if (service.currentState == State.STARTING) {
-            handler.postDelayed({ doReplaceHttpsCertificate(certPem, keyPem, listener) }, DEFERRED_RETRY_DELAY_MS)
+            scope.launch {
+                delay(DEFERRED_RETRY_DELAY_MS)
+                doReplaceHttpsCertificate(certPem, keyPem, listener)
+            }
             return
         }
 
@@ -91,7 +99,10 @@ class HttpsCertManager(private val service: SyncthingService, private val handle
 
     private fun doResetHttpsCertificate(listener: OnHttpsCertReplaceResultListener) {
         if (service.currentState == State.STARTING) {
-            handler.postDelayed({ doResetHttpsCertificate(listener) }, DEFERRED_RETRY_DELAY_MS)
+            scope.launch {
+                delay(DEFERRED_RETRY_DELAY_MS)
+                doResetHttpsCertificate(listener)
+            }
             return
         }
 
@@ -138,14 +149,15 @@ class HttpsCertManager(private val service: SyncthingService, private val handle
         var resolved = false
         var sawStarting = false
         var verifyListener: OnServiceStateChangeListener? = null
-        var watchdog: Runnable? = null
+        var watchdogJob: Job? = null
 
-        val finishSuccess = Runnable {
+        val finishSuccess = {
             deleteQuietly(certBak)
             deleteQuietly(keyBak)
             listener.onResult(HttpsCertReplaceResult.SUCCESS, null)
+            Unit
         }
-        val finishFailure = Runnable {
+        val finishFailure = {
             restoreFile(certBak, certFile)
             restoreFile(keyBak, keyFile)
             // Bring the previous, known-good certificate back online.
@@ -159,19 +171,7 @@ class HttpsCertManager(private val service: SyncthingService, private val handle
             } else {
                 restartWithPreviousCertificate()
             }
-        }
-
-        watchdog = Runnable {
-            if (resolved) {
-                return@Runnable
-            }
-            resolved = true
-            service.unregisterOnServiceStateChangeListener(verifyListener!!)
-            if (service.currentState == State.ACTIVE) {
-                finishSuccess.run()
-            } else {
-                finishFailure.run()
-            }
+            Unit
         }
 
         verifyListener = OnServiceStateChangeListener { state ->
@@ -188,14 +188,14 @@ class HttpsCertManager(private val service: SyncthingService, private val handle
                 return@OnServiceStateChangeListener
             }
             resolved = true
-            handler.removeCallbacks(watchdog!!)
+            watchdogJob?.cancel()
             // Defer unregister + lifecycle work out of onServiceStateChange's listener iteration.
-            handler.post {
+            scope.launch {
                 service.unregisterOnServiceStateChangeListener(verifyListener!!)
                 if (success) {
-                    finishSuccess.run()
+                    finishSuccess()
                 } else {
-                    finishFailure.run()
+                    finishFailure()
                 }
             }
         }
@@ -203,7 +203,19 @@ class HttpsCertManager(private val service: SyncthingService, private val handle
         // registerOnServiceStateChangeListener replays the current state (DISABLED) synchronously;
         // that is ignored because sawStarting is still false.
         service.registerOnServiceStateChangeListener(verifyListener)
-        handler.postDelayed(watchdog!!, HTTPS_CERT_VERIFY_TIMEOUT_MS)
+        watchdogJob = scope.launch {
+            delay(HTTPS_CERT_VERIFY_TIMEOUT_MS)
+            if (resolved) {
+                return@launch
+            }
+            resolved = true
+            service.unregisterOnServiceStateChangeListener(verifyListener!!)
+            if (service.currentState == State.ACTIVE) {
+                finishSuccess()
+            } else {
+                finishFailure()
+            }
+        }
         service.launchStartupTask(SyncthingRunnable.Command.main)
     }
 

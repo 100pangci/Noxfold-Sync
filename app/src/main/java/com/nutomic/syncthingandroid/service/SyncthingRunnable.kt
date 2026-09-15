@@ -32,11 +32,11 @@ import kotlinx.coroutines.runBlocking
  *
  * Runs the syncthing binary from command line, and prints its output to logcat.
  *
- * Coroutines model: the blocking entry points [run] keep their Java signatures
- * (SyncthingService still drives this class from a dedicated thread and joins it after
- * killing the native process) and bridge into the suspend-based [execute] via runBlocking.
- * Stream pumping runs as coroutines on Dispatchers.IO instead of raw threads; the pumps are
- * joined right after waitFor, preserving the old waitFor -> join ordering.
+ * Coroutines model: SyncthingService drives the main binary through the suspend [execute]
+ * (its job is joined after the native process is killed). The blocking [run] bridge is
+ * reserved for synchronous one-shot commands. Stream pumping runs as coroutines on
+ * Dispatchers.IO instead of raw threads; the pumps are joined right after waitFor,
+ * preserving the old waitFor -> join ordering.
  *
  * Divergences from the old implementation (all intentional):
  *  - The exit code is always logged (Log.i), not only in verbose mode. This closes the old
@@ -51,7 +51,7 @@ import kotlinx.coroutines.runBlocking
  *    here; Math.ceilDiv requires Android API 35+, which would break log trimming on older
  *    devices (latent issue, no core library desugaring is configured).
  */
-class SyncthingRunnable(private val context: Context, command: Command) : Runnable {
+class SyncthingRunnable(private val context: Context, command: Command) {
 
     lateinit var preferences: SharedPreferences
 
@@ -110,14 +110,12 @@ class SyncthingRunnable(private val context: Context, command: Command) : Runnab
         plannedShutdown = true
     }
 
-    override fun run() {
-        try {
-            run(false)
-        } catch (e: ExecutableNotFoundException) {
-            throw RuntimeException(e.message)
-        }
-    }
-
+    /**
+     * Blocking one-shot command runner (generate, device-id, reset-database). The main
+     * binary lifecycle uses the suspend [execute] on the service scope; this bridge only
+     * exists for synchronous callers (ConfigXml, config import) and must therefore run on
+     * a background thread.
+     */
     @Throws(ExecutableNotFoundException::class)
     fun run(returnStdOut: Boolean): String = runBlocking { execute(returnStdOut) }
 
