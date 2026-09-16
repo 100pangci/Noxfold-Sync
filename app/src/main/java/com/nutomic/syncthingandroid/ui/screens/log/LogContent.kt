@@ -1,7 +1,6 @@
 package com.nutomic.syncthingandroid.ui.screens.log
 
 import android.content.Context
-import android.text.TextUtils
 import android.util.Log
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.util.Util
@@ -34,7 +33,7 @@ internal object LogContent {
             line = line.replaceFirst("^([0-9]{2}:[0-9]{2}:[0-9]{2})\\.[0-9]{3}\\s".toRegex(), "$1")
             result.add(line)
         }
-        return TextUtils.join("\n", result.toTypedArray())
+        return result.joinToString("\n")
     }
 
     private fun isNoiseLine(logline: String): Boolean {

@@ -11,7 +11,6 @@ import android.content.res.Resources
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkInfo
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
@@ -19,7 +18,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.telephony.TelephonyManager
 import android.util.Log
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.util.JobUtils
@@ -35,24 +33,17 @@ import kotlinx.coroutines.launch
  *
  * This information is actively read on instance creation, and then updated from intents.
  *
- * Kotlin/coroutines port of the former Java implementation (phase4).
- *
- * Threading model: broadcast receivers registered with the system run on the main thread
- * and call [updateShouldRunDecision] synchronously, exactly like the Java original. The
- * asynchronously dispatched sources (default network callback, sync status observer,
- * delayed battery re-evaluation) hand off through [monitorScope] on
- * [Dispatchers.Main], which queues a runnable on the main looper - the same semantics the
- * old `Handler(Looper.getMainLooper()).post(...)` / `postDelayed(...)` calls had.
+ * Threading model: system broadcast receivers run on the main thread and call
+ * [updateShouldRunDecision] synchronously. The asynchronously dispatched sources (default
+ * network callback, sync status observer, delayed battery re-evaluation) hand off through
+ * [monitorScope] on [Dispatchers.Main], so every decision is evaluated on the main thread.
  *
  * [shouldRunFlow] and [runDecisionExplanationFlow] expose the last decision as observable
- * state for future Kotlin/Flow consumers; the legacy
- * [OnShouldRunChangedListener] / [OnSyncPreconditionChangedListener] callbacks keep
- * their signatures while Java callers (SyncthingService) are not yet migrated.
+ * state; the [OnShouldRunChangedListener] / [OnSyncPreconditionChangedListener] callbacks
+ * remain for the service.
  *
- * Intentional divergence from the Java implementation: [shutdown] cancels [monitorScope],
- * so pending delayed re-evaluations (e.g. a battery update scheduled 5s before shutdown)
- * no longer fire after the monitor is torn down. The old code kept the main-thread
- * handler alive and could invoke decision callbacks after shutdown.
+ * [shutdown] cancels [monitorScope], so pending delayed re-evaluations (e.g. a battery
+ * update scheduled 5s before shutdown) no longer fire after the monitor is torn down.
  */
 class RunConditionMonitor(
     private val context: Context,
@@ -74,12 +65,6 @@ class RunConditionMonitor(
          */
         private const val DEFAULT_SYNC_DURATION_MINUTES = "5"
         private const val DEFAULT_SLEEP_INTERVAL_MINUTES = "60"
-
-        const val ACTION_SYNC_TRIGGER_FIRED = ".service.RunConditionMonitor.ACTION_SYNC_TRIGGER_FIRED"
-
-        const val ACTION_UPDATE_SHOULDRUN_DECISION = ".service.RunConditionMonitor.ACTION_UPDATE_SHOULDRUN_DECISION"
-
-        const val EXTRA_BEGIN_ACTIVE_TIME_WINDOW = ".service.RunConditionMonitor.BEGIN_ACTIVE_TIME_WINDOW"
     }
 
     interface OnShouldRunChangedListener {
@@ -121,10 +106,6 @@ class RunConditionMonitor(
 
     private var syncStatusObserverHandle: Any? = null
 
-    private var syncTriggerReceiver: SyncTriggerReceiver? = null
-
-    private var updateShouldRunDecisionReceiver: UpdateShouldRunDecisionReceiver? = null
-
     /**
      * API 24+: Replaces the deprecated CONNECTIVITY_ACTION broadcast.
      * The callback only notifies about default network changes; the current
@@ -146,12 +127,8 @@ class RunConditionMonitor(
         /**
          * Register broadcast receivers.
          */
-        // NetworkReceiver (legacy API 23 fallback; API 24+ uses a default network callback instead).
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            ReceiverManager.registerReceiver(context, NetworkReceiver(), IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
-        } else {
-            registerNetworkCallback()
-        }
+        // Default network callback; supersedes the deprecated CONNECTIVITY_ACTION broadcast.
+        registerNetworkCallback()
 
         // BatteryReceiver
         val batteryFilter = IntentFilter().apply {
@@ -176,15 +153,18 @@ class RunConditionMonitor(
             }
         )
 
-        // SyncTriggerReceiver
-        val localBroadcastManager = LocalBroadcastManager.getInstance(context)
-        syncTriggerReceiver = SyncTriggerReceiver().also {
-            localBroadcastManager.registerReceiver(it, IntentFilter(ACTION_SYNC_TRIGGER_FIRED))
-        }
-
-        // UpdateShouldRunDecisionReceiver
-        updateShouldRunDecisionReceiver = UpdateShouldRunDecisionReceiver().also {
-            localBroadcastManager.registerReceiver(it, IntentFilter(ACTION_UPDATE_SHOULDRUN_DECISION))
+        // In-process run condition events (sync trigger + should-run re-evaluation).
+        monitorScope.launch {
+            RunConditionEvents.events.collect { event ->
+                when (event) {
+                    is RunConditionEvents.Event.SyncTriggerFired ->
+                        onSyncTriggerFired(event.beginActiveTimeWindow)
+                    RunConditionEvents.Event.UpdateShouldRunDecision -> {
+                        logV("UpdateShouldRunDecision event received")
+                        updateShouldRunDecision()
+                    }
+                }
+            }
         }
 
         if (!Constants.isRunningOnEmulator()) {
@@ -249,17 +229,6 @@ class RunConditionMonitor(
         // NetworkCallback (API 24+)
         unregisterNetworkCallback()
 
-        // SyncTriggerReceiver
-        syncTriggerReceiver?.let {
-            LocalBroadcastManager.getInstance(context).unregisterReceiver(it)
-        }
-        syncTriggerReceiver = null
-
-        // UpdateShouldRunDecisionReceiver
-        updateShouldRunDecisionReceiver?.let {
-            LocalBroadcastManager.getInstance(context).unregisterReceiver(it)
-        }
-        updateShouldRunDecisionReceiver = null
         ReceiverManager.unregisterAllReceivers(context)
     }
 
@@ -278,19 +247,7 @@ class RunConditionMonitor(
         }
     }
 
-    private inner class NetworkReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (ConnectivityManager.CONNECTIVITY_ACTION == intent.action) {
-                updateShouldRunDecision()
-            }
-        }
-    }
-
     private fun registerNetworkCallback() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            // Should never happen; the caller only registers on API 24+.
-            return
-        }
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         if (cm == null) {
             Log.e(TAG, "registerNetworkCallback: getSystemService(CONNECTIVITY_SERVICE) unexpectedly returned NULL.")
@@ -351,104 +308,94 @@ class RunConditionMonitor(
         }
     }
 
-    private inner class SyncTriggerReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            runAllowedStopScheduled = false
-            val extraBeginActiveTimeWindow = intent.getBooleanExtra(EXTRA_BEGIN_ACTIVE_TIME_WINDOW, false)
-            logV("SyncTriggerReceiver: onReceive, extraBeginActiveTimeWindow=$extraBeginActiveTimeWindow")
+    private fun onSyncTriggerFired(extraBeginActiveTimeWindow: Boolean) {
+        runAllowedStopScheduled = false
+        logV("SyncTrigger: beginActiveTimeWindow=$extraBeginActiveTimeWindow")
 
-            val prefRunOnTimeSchedule = preferences.getBoolean(Constants.PREF_RUN_ON_TIME_SCHEDULE, false)
-            if (!prefRunOnTimeSchedule) {
-                /**
-                 * The feature is currently disabled.
-                 * Reschedule the job to see if the user turned on this feature in the meantime.
-                 */
-                timeConditionMatch = false
-                JobUtils.cancelAllScheduledJobs(context)
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncSleepIntervalS,
-                    true
-                )
-                return
-            }
-
-            // extraBeginActiveTimeWindow determines whether syncthing should start or stop
-            if (extraBeginActiveTimeWindow) {
-                // We should immediately start SyncthingNative for TRIGGERED_SYNC_DURATION_SECS.
-                timeConditionMatch = true
-                JobUtils.cancelAllScheduledJobs(context)
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncDurationS,
-                    false
-                )
-                runAllowedStopScheduled = true
-            } else {
-                /**
-                 * Toggle the "digital input" for this condition as the condition change is
-                 * triggered by a time schedule.
-                 */
-                timeConditionMatch = false
-                /**
-                 * If Syncthing is running and the last run was more than triggeredSyncSleepIntervalS ago,
-                 * this stop job might actually start Syncthing (resp. leave it running) because
-                 * timeConditionMatch is switched to true if last run was more than triggeredSyncSleepIntervalS ago.
-                 * So in this case we put a new (fake) last run time slightly less than triggeredSyncSleepIntervalS ago.
-                 * If Syncthing really is stopped (which it should) then the wrong time gets
-                 * corrected immediately
-                 */
-                val lastRunTimeMillis = preferences.getLong(Constants.PREF_LAST_RUN_TIME, 0)
-                if (lastDeterminedShouldRun &&
-                    SystemClock.elapsedRealtime() - lastRunTimeMillis > triggeredSyncSleepIntervalS * 1000
-                ) {
-                    preferences.edit()
-                        .putLong(
-                            Constants.PREF_LAST_RUN_TIME,
-                            SystemClock.elapsedRealtime() - triggeredSyncSleepIntervalS * 1000 + 60 * 1000
-                        )
-                        .apply()
-                }
-            }
-            updateShouldRunDecision()
-
+        val prefRunOnTimeSchedule = preferences.getBoolean(Constants.PREF_RUN_ON_TIME_SCHEDULE, false)
+        if (!prefRunOnTimeSchedule) {
             /**
-             * Reschedule the job.
-             * If we are within a "SyncthingNative shouldn't run" time frame,
-             * let the receiver fire and change to "SyncthingNative should run" after
-             * triggeredSyncSleepIntervalS seconds elapsed.
-             * If we are within a "SyncthingNative should run" time frame,
-             * the change to "SyncthingNative shouldn't run" after
-             * TRIGGERED_SYNC_DURATION_SECS seconds elapsed should actually
-             * be scheduled inside updateShouldRunDecision(), but this might
-             * not always be the case.
-             * Thus we schedule an additional change to "SyncthingNative shouldn't run"
-             * after TRIGGERED_SYNC_DURATION_SECS seconds elapsed, but without
-             * cancelling other jobs. This should only serve as a backup job and
-             * will not fire if the job inside updateShouldRunDecision() is
-             * scheduled correctly.
+             * The feature is currently disabled.
+             * Reschedule the job to see if the user turned on this feature in the meantime.
              */
-            if (!runAllowedStopScheduled && !lastDeterminedShouldRun) {
-                JobUtils.cancelAllScheduledJobs(context)
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncSleepIntervalS,
-                    true
-                )
-            } else {
-                JobUtils.scheduleSyncTriggerServiceJob(
-                    context,
-                    triggeredSyncDurationS,
-                    false
-                )
+            timeConditionMatch = false
+            JobUtils.cancelAllScheduledJobs(context)
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncSleepIntervalS,
+                true
+            )
+            return
+        }
+
+        // extraBeginActiveTimeWindow determines whether syncthing should start or stop
+        if (extraBeginActiveTimeWindow) {
+            // We should immediately start SyncthingNative for TRIGGERED_SYNC_DURATION_SECS.
+            timeConditionMatch = true
+            JobUtils.cancelAllScheduledJobs(context)
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncDurationS,
+                false
+            )
+            runAllowedStopScheduled = true
+        } else {
+            /**
+             * Toggle the "digital input" for this condition as the condition change is
+             * triggered by a time schedule.
+             */
+            timeConditionMatch = false
+            /**
+             * If Syncthing is running and the last run was more than triggeredSyncSleepIntervalS ago,
+             * this stop job might actually start Syncthing (resp. leave it running) because
+             * timeConditionMatch is switched to true if last run was more than triggeredSyncSleepIntervalS ago.
+             * So in this case we put a new (fake) last run time slightly less than triggeredSyncSleepIntervalS ago.
+             * If Syncthing really is stopped (which it should) then the wrong time gets
+             * corrected immediately
+             */
+            val lastRunTimeMillis = preferences.getLong(Constants.PREF_LAST_RUN_TIME, 0)
+            if (lastDeterminedShouldRun &&
+                SystemClock.elapsedRealtime() - lastRunTimeMillis > triggeredSyncSleepIntervalS * 1000
+            ) {
+                preferences.edit()
+                    .putLong(
+                        Constants.PREF_LAST_RUN_TIME,
+                        SystemClock.elapsedRealtime() - triggeredSyncSleepIntervalS * 1000 + 60 * 1000
+                    )
+                    .apply()
             }
         }
-    }
+        updateShouldRunDecision()
 
-    private inner class UpdateShouldRunDecisionReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            logV("UpdateShouldRunDecisionReceiver: onReceive")
-            updateShouldRunDecision()
+        /**
+         * Reschedule the job.
+         * If we are within a "SyncthingNative shouldn't run" time frame,
+         * let the receiver fire and change to "SyncthingNative should run" after
+         * triggeredSyncSleepIntervalS seconds elapsed.
+         * If we are within a "SyncthingNative should run" time frame,
+         * the change to "SyncthingNative shouldn't run" after
+         * TRIGGERED_SYNC_DURATION_SECS seconds elapsed should actually
+         * be scheduled inside updateShouldRunDecision(), but this might
+         * not always be the case.
+         * Thus we schedule an additional change to "SyncthingNative shouldn't run"
+         * after TRIGGERED_SYNC_DURATION_SECS seconds elapsed, but without
+         * cancelling other jobs. This should only serve as a backup job and
+         * will not fire if the job inside updateShouldRunDecision() is
+         * scheduled correctly.
+         */
+        if (!runAllowedStopScheduled && !lastDeterminedShouldRun) {
+            JobUtils.cancelAllScheduledJobs(context)
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncSleepIntervalS,
+                true
+            )
+        } else {
+            JobUtils.scheduleSyncTriggerServiceJob(
+                context,
+                triggeredSyncDurationS,
+                false
+            )
         }
     }
 
@@ -577,7 +524,7 @@ class RunConditionMonitor(
     ): SyncConditionResult {
         val wifiWhitelistEnabled = preferences.getBoolean(prefNameUseWifiWhitelist, false)
         val whitelistedWifiSsids: Set<String> =
-            preferences.getStringSet(prefNameSelectedWhitelistSsid, HashSet()) ?: HashSet()
+            preferences.getStringSet(prefNameSelectedWhitelistSsid, hashSetOf()) ?: hashSetOf()
         return try {
             if (wifiWhitelistConditionMet(wifiWhitelistEnabled, whitelistedWifiSsids)) {
                 SyncConditionResult(true, "\n" + res.getString(R.string.reason_on_whitelisted_wifi))
@@ -910,94 +857,20 @@ class RunConditionMonitor(
     }
 
     private fun isFlightMode(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            getActiveNetworkCapabilities() == null
-        } else {
-            isFlightModeLegacy()
-        }
+        return getActiveNetworkCapabilities() == null
     }
 
     private fun isMeteredNetworkConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val nc = getActiveNetworkCapabilities()
-            if (nc == null) {
-                // In flight mode.
-                return false
-            }
-            if (!nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-                // No network connection.
-                return false
-            }
-            if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
-                /**
-                 * We treat Wi-Fi and ETHERNET as "Wi-Fi" connection.
-                 * Assume ETHERNET connection is un-metered to allow syncing on
-                 * Android TV or VirtualBox ETHERNET connection.
-                 */
-                return false
-            }
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            return cm != null && cm.isActiveNetworkMetered
-        }
-        return isMeteredNetworkConnectionLegacy()
-    }
-
-    private fun isMobileDataConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)
-        }
-        return isMobileDataConnectionLegacy()
-    }
-
-    private fun isRoamingNetworkConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val nc = getActiveNetworkCapabilities()
-            if (nc == null || !nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
-                !nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-            ) {
-                // Not on a (connected) mobile data network.
-                return false
-            }
-            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-            return tm != null && tm.isNetworkRoaming
-        }
-        return isRoamingNetworkConnectionLegacy()
-    }
-
-    private fun isWifiOrEthernetConnection(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-        }
-        return isWifiOrEthernetConnectionLegacy()
-    }
-
-    /**
-     * Legacy API 23 helpers, kept because [ConnectivityManager.registerDefaultNetworkCallback]
-     * requires API 24.
-     */
-    @Suppress("DEPRECATION")
-    private fun isFlightModeLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        val ni: NetworkInfo? = cm?.activeNetworkInfo
-        return ni == null
-    }
-
-    @Suppress("DEPRECATION")
-    private fun isMeteredNetworkConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
+        val nc = getActiveNetworkCapabilities()
+        if (nc == null) {
             // In flight mode.
             return false
         }
-        if (!ni.isConnected) {
+        if (!nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
             // No network connection.
             return false
         }
-        if (ni.type == ConnectivityManager.TYPE_ETHERNET) {
+        if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
             /**
              * We treat Wi-Fi and ETHERNET as "Wi-Fi" connection.
              * Assume ETHERNET connection is un-metered to allow syncing on
@@ -1005,66 +878,30 @@ class RunConditionMonitor(
              */
             return false
         }
-        return cm.isActiveNetworkMetered
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        return cm != null && cm.isActiveNetworkMetered
     }
 
-    @Suppress("DEPRECATION")
-    private fun isMobileDataConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
-            // In flight mode.
-            return false
-        }
-        if (!ni.isConnected) {
-            // No network connection.
-            return false
-        }
-        return when (ni.type) {
-            ConnectivityManager.TYPE_BLUETOOTH,
-            ConnectivityManager.TYPE_MOBILE,
-            ConnectivityManager.TYPE_MOBILE_DUN,
-            ConnectivityManager.TYPE_MOBILE_HIPRI -> true
-            else -> false
-        }
+    private fun isMobileDataConnection(): Boolean {
+        return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+            hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)
     }
 
-    @Suppress("DEPRECATION")
-    private fun isRoamingNetworkConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
-            // In flight mode.
+    private fun isRoamingNetworkConnection(): Boolean {
+        val nc = getActiveNetworkCapabilities()
+        if (nc == null || !nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
+            !nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+        ) {
+            // Not on a (connected) mobile data network.
             return false
         }
-        if (!ni.isConnected) {
-            // No network connection.
-            return false
-        }
-        return ni.isRoaming
+        val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        return tm != null && tm.isNetworkRoaming
     }
 
-    @Suppress("DEPRECATION")
-    private fun isWifiOrEthernetConnectionLegacy(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val ni = cm.activeNetworkInfo
-        if (ni == null) {
-            // In flight mode.
-            return false
-        }
-        if (!ni.isConnected) {
-            // No network connection.
-            return false
-        }
-        return when (ni.type) {
-            ConnectivityManager.TYPE_WIFI,
-            ConnectivityManager.TYPE_WIMAX,
-            ConnectivityManager.TYPE_ETHERNET -> true
-            else -> false
-        }
+    private fun isWifiOrEthernetConnection(): Boolean {
+        return hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            hasActiveNetworkTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
     }
 
     @Suppress("DEPRECATION")

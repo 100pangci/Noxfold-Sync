@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.model.Event
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +12,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -65,7 +68,7 @@ class EventPollerTest {
         scope.cancel()
     }
 
-    private fun event(type: String, data: HashMap<String, Any>): Event {
+    private fun event(type: String, data: JsonObject = buildJsonObject { }): Event {
         val event = Event()
         event.id = 1
         event.type = type
@@ -90,7 +93,7 @@ class EventPollerTest {
     private fun stubFetch(lastId: Long, vararg events: Event) {
         doAnswer { invocation ->
             val listener = invocation.getArgument<RestApi.OnReceiveEventListener>(2)
-            events.forEach { listener.onEvent(it, JsonObject()) }
+            events.forEach { listener.onEvent(it, buildJsonObject { }) }
             listener.onDone(lastId)
             null
         }.`when`(restApi).getEvents(anyLong(), eq(0L), any())
@@ -135,8 +138,8 @@ class EventPollerTest {
         stubProbe(lastId = 200)
         stubFetch(
                 lastId = 102,
-                event("StateChanged", hashMapOf("folder" to "f", "to" to "idle")),
-                event("StateChanged", hashMapOf("folder" to "f", "to" to "syncing")),
+                event("StateChanged", buildJsonObject { put("folder", "f"); put("to", "idle") }),
+                event("StateChanged", buildJsonObject { put("folder", "f"); put("to", "syncing") }),
         )
         poller.start()
 
@@ -252,7 +255,7 @@ class EventPollerTest {
 
     @Test
     fun configSaved_reloadsConfig() {
-        poller.onEvent(event("ConfigSaved", hashMapOf()), JsonObject())
+        poller.onEvent(event("ConfigSaved"), buildJsonObject { })
 
         verify(restApi).reloadConfig()
     }
@@ -260,12 +263,12 @@ class EventPollerTest {
     @Test
     fun deviceConnectivityEvents_areForwarded() {
         poller.onEvent(
-                event("DeviceConnected", hashMapOf("id" to "DEVICE-1")),
-                JsonObject()
+                event("DeviceConnected", buildJsonObject { put("id", "DEVICE-1") }),
+                buildJsonObject { }
         )
         poller.onEvent(
-                event("DeviceDisconnected", hashMapOf("id" to "DEVICE-1")),
-                JsonObject()
+                event("DeviceDisconnected", buildJsonObject { put("id", "DEVICE-1") }),
+                buildJsonObject { }
         )
 
         verify(restApi).updateRemoteDeviceConnected("DEVICE-1", true)
@@ -290,13 +293,13 @@ class EventPollerTest {
             poller.onEvent(
                     event(
                             type,
-                            hashMapOf(
-                                    "device" to "DEVICE-1",
-                                    "folder" to "folder-a",
-                                    "items" to 5.0,
-                            )
+                            buildJsonObject {
+                                put("device", "DEVICE-1")
+                                put("folder", "folder-a")
+                                put("items", 5.0)
+                            }
                     ),
-                    JsonObject()
+                    buildJsonObject { }
             )
         }
 
@@ -308,13 +311,13 @@ class EventPollerTest {
         poller.onEvent(
                 event(
                         "RemoteIndexUpdated",
-                        hashMapOf(
-                                "device" to "DEVICE-1",
-                                "folder" to "folder-a",
-                                "items" to 5.0,
-                        )
+                        buildJsonObject {
+                            put("device", "DEVICE-1")
+                            put("folder", "folder-a")
+                            put("items", 5.0)
+                        }
                 ),
-                JsonObject()
+                buildJsonObject { }
         )
 
         verify(restApi).setRemoteIndexUpdated("DEVICE-1", "folder-a", true)
@@ -325,13 +328,13 @@ class EventPollerTest {
         poller.onEvent(
                 event(
                         "RemoteIndexUpdated",
-                        hashMapOf(
-                                "device" to "DEVICE-1",
-                                "folder" to "folder-a",
-                                "items" to 0.0,
-                        )
+                        buildJsonObject {
+                            put("device", "DEVICE-1")
+                            put("folder", "folder-a")
+                            put("items", 0.0)
+                        }
                 ),
-                JsonObject()
+                buildJsonObject { }
         )
 
         verify(restApi, never()).setRemoteIndexUpdated(anyString(), anyString(), anyBoolean())
@@ -339,22 +342,45 @@ class EventPollerTest {
 
     @Test
     fun pendingFoldersChanged_withoutDeviceId_doesNotCrashAndNotifies() {
-        val pendingFolder = hashMapOf<String, Any>("folderID" to "folder-a")
         poller.onEvent(
-                event("PendingFoldersChanged", hashMapOf("added" to arrayListOf(pendingFolder))),
-                JsonObject()
+                event(
+                        "PendingFoldersChanged",
+                        buildJsonObject {
+                            put(
+                                "added",
+                                buildJsonArray {
+                                    add(buildJsonObject { put("folderID", "folder-a") })
+                                }
+                            )
+                        }
+                ),
+                buildJsonObject { }
         )
         // Must not throw (regression: null dereference before the null check).
     }
 
     @Test
     fun folderErrors_insufficientSpace_postsCrashNotification() {
-        val json = JsonParser.parseString(
-                "{\"data\": {\"errors\": [{\"error\": \"insufficient space in basic folder\", " +
-                        "\"path\": \"/storage/emulated/0/Sync/file.txt\"}]}}")
-                .getAsJsonObject()
+        val json = buildJsonObject {
+            put(
+                "data",
+                buildJsonObject {
+                    put(
+                        "errors",
+                        buildJsonArray {
+                            add(
+                                buildJsonObject {
+                                    put("error", "insufficient space in basic folder")
+                                    put("path", "/storage/emulated/0/Sync/file.txt")
+                                }
+                            )
+                        }
+                    )
+                }
+            )
+        }
 
-        poller.onEvent(event("FolderErrors", hashMapOf()), json)
+        poller.onEvent(event("FolderErrors"), json)
 
         assertTrue(notificationManager.activeNotifications.size >= 1)
     }

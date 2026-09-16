@@ -14,6 +14,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.activity.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.android.material)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
@@ -22,12 +23,10 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.documentfile)
     implementation(libs.fragment.ktx)
-    implementation(libs.gson)
     implementation(libs.jbcrypt)
-    implementation(libs.kotlinx.serialization.core)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.lingala.zip4j)
-    implementation(libs.localbroadcastmanager)
     implementation(libs.navigation3.runtime)
     implementation(libs.navigation3.ui)
     implementation(libs.libsu.core)
@@ -121,10 +120,20 @@ android {
             isDebuggable = true
             isJniDebuggable = true
             isMinifyEnabled = false
+            // Keep local debug builds small: the universal debug APK otherwise packs all
+            // four native cores (~79 MB). Add more ABIs here when testing on other devices.
+            ndk {
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
             signingConfig = signingConfigs.getByName("localDebug").takeIf { it.storeFile != null }
         }
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.runCatching { getByName("release") }
                 .getOrNull()
                 .takeIf { it?.storeFile != null }

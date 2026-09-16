@@ -435,7 +435,7 @@ private fun CustomCertificatePreference(
         summary = { Text(stringResource(R.string.webui_custom_cert_summary)) },
         onClick = { navigator.navigateTo(SettingsRoute.CustomCertificate) },
         // The custom certificate only matters when the GUI is served over HTTPS.
-        enabled = stService != null && Constants.osSupportsTLS12(),
+        enabled = stService != null,
     )
 }
 

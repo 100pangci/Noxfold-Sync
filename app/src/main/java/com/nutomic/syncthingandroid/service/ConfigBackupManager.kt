@@ -2,8 +2,6 @@ package com.nutomic.syncthingandroid.service
 
 import android.content.SharedPreferences
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 
 import com.nutomic.syncthingandroid.service.SyncthingService.State
@@ -278,8 +276,7 @@ class ConfigBackupManager(private val service: SyncthingService,
 
     private fun restartIfRunConditionsApply() {
         if (service.shouldRunAfterRestart()) {
-            val mainLooper = Handler(Looper.getMainLooper())
-            mainLooper.post { service.launchStartupTask(SyncthingRunnable.Command.main) }
+            service.launchStartupTaskOnMainThread(SyncthingRunnable.Command.main)
         }
     }
 
@@ -311,7 +308,8 @@ class ConfigBackupManager(private val service: SyncthingService,
 
             if (folderPathMissing || markerMissing) {
                 Log.i(TAG, "importConfig: Folder path or marker missing for folder id \"" + folder.id + "\". Resetting Syncthing database.")
-                SyncthingRunnable(service, SyncthingRunnable.Command.resetdatabase).run()
+                SyncthingRunnable(service, SyncthingRunnable.Command.resetdatabase)
+                    .run(returnStdOut = false)
                 break
             }
         }

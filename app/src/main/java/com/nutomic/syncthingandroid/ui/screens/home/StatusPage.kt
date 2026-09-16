@@ -24,7 +24,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +40,7 @@ import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.model.Connection
 import com.nutomic.syncthingandroid.model.SystemStatus
 import com.nutomic.syncthingandroid.service.Constants
+import com.nutomic.syncthingandroid.service.RunConditionEvents
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
@@ -88,7 +89,7 @@ fun StatusPage(
 
     // Overall sync completion is event-driven inside RestApi and cached as a
     // StateFlow (phase6b): collect it instead of polling the cache here.
-    val totalSyncCompletion = api?.totalSyncCompletion?.collectAsState()?.value ?: -1
+    val totalSyncCompletion = api?.totalSyncCompletion?.collectAsStateWithLifecycle()?.value ?: -1
 
     LaunchedEffect(serviceState, visible) {
         if (!visible) return@LaunchedEffect
@@ -255,13 +256,7 @@ fun StatusPage(
                             .putInt(Constants.PREF_BTNSTATE_FORCE_START_STOP, index)
                             .apply()
                         // Notify RunConditionMonitor that the decision changed.
-                        androidx.localbroadcastmanager.content.LocalBroadcastManager
-                            .getInstance(context)
-                            .sendBroadcast(
-                                android.content.Intent(
-                                    com.nutomic.syncthingandroid.service.RunConditionMonitor.ACTION_UPDATE_SHOULDRUN_DECISION
-                                )
-                            )
+                        RunConditionEvents.requestUpdateShouldRunDecision()
                     },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
                     // Custom icon slot: draw the check mark (with a small

@@ -4,7 +4,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import androidx.appcompat.app.AppCompatActivity
@@ -61,11 +60,7 @@ abstract class SyncthingActivity : ThemedAppCompatActivity(), ServiceConnection 
         // back to writing config.xml, which a running Syncthing instance never
         // re-reads.
         val serviceIntent = Intent(this, SyncthingService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        startForegroundService(serviceIntent)
         bindService(Intent(this, SyncthingService::class.java), this, Context.BIND_AUTO_CREATE)
     }
 

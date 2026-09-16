@@ -1,14 +1,13 @@
 package com.nutomic.syncthingandroid.ui.screens.folder
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.RestApi
+import com.nutomic.syncthingandroid.service.RunConditionEvents
 import com.nutomic.syncthingandroid.ui.nav.AppNavigator
 import com.nutomic.syncthingandroid.util.ConfigRouter
 import kotlinx.coroutines.CoroutineScope
@@ -89,10 +88,7 @@ internal object FolderEditActions {
                 }
 
                 // Start sync after adding a folder.
-                LocalBroadcastManager.getInstance(context.applicationContext).sendBroadcast(
-                    Intent(com.nutomic.syncthingandroid.service.RunConditionMonitor.ACTION_SYNC_TRIGGER_FIRED)
-                        .putExtra(com.nutomic.syncthingandroid.service.RunConditionMonitor.EXTRA_BEGIN_ACTIVE_TIME_WINDOW, true)
-                )
+                RunConditionEvents.fireSyncTrigger(beginActiveTimeWindow = true)
                 setSaving(false)
                 navigator.navigateBack()
             }

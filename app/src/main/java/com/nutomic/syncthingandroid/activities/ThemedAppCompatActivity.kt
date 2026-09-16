@@ -23,7 +23,7 @@ abstract class ThemedAppCompatActivity : AppCompatActivity() {
         val prefAppTheme = sharedPreferences.getString(
             Constants.PREF_APP_THEME,
             AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM.toString()
-        )!!.toInt()
+        )?.toIntOrNull() ?: AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         AppCompatDelegate.setDefaultNightMode(
             if (prefAppTheme == 3) {
                 AppCompatDelegate.MODE_NIGHT_YES

@@ -3,7 +3,6 @@ package com.nutomic.syncthingandroid.service
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.os.Build
-import android.text.TextUtils
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -193,14 +192,8 @@ object Constants {
 
     /**
      * Interval in ms at which RestAPI is polled.
-     * As a rule of thumb: Poll faster on "modern" devices.
      */
-    val REST_UPDATE_INTERVAL = TimeUnit.SECONDS.toMillis(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                3
-            else
-                5
-    )
+    val REST_UPDATE_INTERVAL = TimeUnit.SECONDS.toMillis(3)
 
     val GUI_UPDATE_INTERVAL = TimeUnit.SECONDS.toMillis(1)
 
@@ -302,8 +295,8 @@ object Constants {
      * Checks if the app is running on an Android emulator (AVD).
      */
     fun isRunningOnEmulator(): Boolean {
-        return !TextUtils.isEmpty(Build.MANUFACTURER) &&
-                !TextUtils.isEmpty(Build.MODEL) &&
+        return !Build.MANUFACTURER.isNullOrEmpty() &&
+                !Build.MODEL.isNullOrEmpty() &&
                         (
                             Build.MANUFACTURER == "Google" ||
                             Build.MANUFACTURER == "unknown"
@@ -316,25 +309,6 @@ object Constants {
 
     fun isDebuggable(context: Context): Boolean {
         return (0 != (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE))
-    }
-
-    /**
-     * Decide if we should enforce HTTPS when accessing the Web UI and REST API.
-     * Android 4.4 and earlier don't have support for TLS 1.2 requiring us to
-     * fall back to an unencrypted HTTP connection to localhost. This applies
-     * to syncthing core v0.14.53+.
-     */
-    fun osSupportsTLS12(): Boolean {
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.N) {
-            /**
-             * SSLProtocolException: SSL handshake failed on Android N/7.0,
-             * missing support for elliptic curves.
-             * See https://issuetracker.google.com/issues/37122132
-             */
-            return false
-        }
-
-        return true
     }
 
     /**

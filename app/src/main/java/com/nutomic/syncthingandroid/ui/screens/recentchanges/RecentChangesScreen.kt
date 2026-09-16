@@ -69,8 +69,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.util.isTelevision
-import java.text.DateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import com.nutomic.syncthingandroid.activities.RecentChange
 import com.nutomic.syncthingandroid.activities.ChangeAction
 import com.nutomic.syncthingandroid.activities.ChangeType
@@ -288,7 +290,9 @@ private val METADATA_ICON_SIZE = 14.dp
 private fun RecentChange.timeText(showExactTimes: Boolean): String {
     val millis = timeMillis ?: return rawTime
     return if (showExactTimes) {
-        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM).format(Date(millis))
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.MEDIUM)
+            .withZone(ZoneId.systemDefault())
+            .format(Instant.ofEpochMilli(millis))
     } else {
         // Recomputed on every recomposition, which the foreground poll triggers every few seconds,
         // so the label stays current without a dedicated ticker.

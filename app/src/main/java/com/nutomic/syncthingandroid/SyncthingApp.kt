@@ -14,7 +14,7 @@ class SyncthingApp : Application() {
     }
 
     val notificationHandler: NotificationHandler by lazy {
-        NotificationHandler(this, preferences)
+        NotificationHandler(this)
     }
 
     val safBridge: SafBridge by lazy {

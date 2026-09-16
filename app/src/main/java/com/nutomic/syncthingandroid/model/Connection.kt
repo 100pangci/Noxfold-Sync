@@ -1,30 +1,22 @@
 package com.nutomic.syncthingandroid.model
 
-/** Public fields on purpose: Gson reflective binding + direct field access from Java tests. */
-class Connection {
-    @JvmField
-    var address: String = ""
-    @JvmField
-    var at: String = ""
-    @JvmField
-    var clientVersion: String = ""
-    @JvmField
-    var connected: Boolean = false
-    @JvmField
-    var inBytesTotal: Long = 0
-    @JvmField
-    var outBytesTotal: Long = 0
-    @JvmField
-    var paused: Boolean = false
-    @JvmField
-    var type: String = ""
+import kotlinx.serialization.Serializable
 
-    // These fields are not sent from Syncthing. They are populated by {@link #setTransferRate}.
-    @JvmField
-    var inBits: Long = 0
-    @JvmField
-    var outBits: Long = 0
+@Serializable
+data class Connection(
+    var address: String = "",
+    var at: String = "",
+    var clientVersion: String = "",
+    var connected: Boolean = false,
+    var inBytesTotal: Long = 0,
+    var outBytesTotal: Long = 0,
+    var paused: Boolean = false,
+    var type: String = "",
 
+    // These fields are not sent from Syncthing. They are populated by [setTransferRate].
+    var inBits: Long = 0,
+    var outBits: Long = 0,
+) {
     fun setTransferRate(previous: Connection, msElapsed: Long) {
         val secondsElapsed = msElapsed / 1000
         val inBytes = 8 * (inBytesTotal - previous.inBytesTotal) / secondsElapsed

@@ -11,8 +11,10 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
-import java.text.DateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 /**
  * File naming + copying helpers, ported from the legacy ShareActivity.
@@ -27,9 +29,10 @@ internal object ShareFilesHelper {
      * Generate file name for new file.
      */
     fun generateDisplayName(context: Context): String {
-        val date = Date(System.currentTimeMillis())
-        val df = DateFormat.getDateTimeInstance()
-        return String.format(context.resources.getString(R.string.file_name_template), df.format(date))
+        val dateTime = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
+            .withZone(ZoneId.systemDefault())
+            .format(Instant.now())
+        return String.format(context.resources.getString(R.string.file_name_template), dateTime)
     }
 
     /**

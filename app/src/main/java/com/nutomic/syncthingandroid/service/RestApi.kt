@@ -3,17 +3,8 @@ package com.nutomic.syncthingandroid.service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.preference.PreferenceManager
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import com.google.gson.JsonSyntaxException
-import com.google.gson.reflect.TypeToken
 import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.activities.ShareActivity
 import com.nutomic.syncthingandroid.http.ApiClient
@@ -43,12 +34,14 @@ import com.nutomic.syncthingandroid.model.SystemStatus
 import com.nutomic.syncthingandroid.util.FileUtils
 import com.nutomic.syncthingandroid.util.Util
 import com.nutomic.syncthingandroid.util.Util.getLocalZonedDateTime
+import com.nutomic.syncthingandroid.util.deepCopy
+import com.nutomic.syncthingandroid.util.json as jsonCodec
+import com.nutomic.syncthingandroid.util.prettyJson
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.util.AbstractMap
 import java.util.Collections
 import java.util.HashSet
 import java.util.Locale
@@ -59,10 +52,19 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Provides functions to interact with the syncthing REST API.
@@ -218,8 +220,6 @@ class RestApi(
 
     private var hasShutdown = false
 
-    private val gson: Gson = GsonBuilder().create()
-
     private val executorService: ExecutorService = Executors.newSingleThreadExecutor()
 
     lateinit var notificationHandler: NotificationHandler
@@ -303,8 +303,8 @@ class RestApi(
             asyncQuerySystemStatusComplete = false
         }
         apiGet(ApiClient.URI_VERSION, null, { result ->
-            val json = JsonParser.parseString(result).asJsonObject
-            version = json.get("version").asString
+            val versionObject = jsonCodec.parseToJsonElement(result).jsonObject
+            version = versionObject["version"]?.jsonPrimitive?.content ?: ""
             updateDebugFacilitiesCache()
             synchronized(asyncQueryCompleteLock) {
                 asyncQueryVersionComplete = true
@@ -356,14 +356,14 @@ class RestApi(
 
         // Temporarily lower cleanupIntervalS for every folder to force cleanup after startup.
         setVersioningCleanupIntervalS(VERSIONING_CLEANUP_INTERVAL_S_TEMPORARY)
-        val resetCleanupIntervalHandler = Handler(Looper.getMainLooper())
-        resetCleanupIntervalHandler.postDelayed({
+        restScope.launch {
+            delay(VERSIONING_CLEANUP_RESET_DELAY_MS)
             if (hasShutdown) {
                 LogV("Skipping resetting the versioning cleanup interval due to hasShutdown == true")
-                return@postDelayed
+                return@launch
             }
             setVersioningCleanupIntervalS(VERSIONING_CLEANUP_INTERVAL_S_DEFAULT)
-        }, VERSIONING_CLEANUP_RESET_DELAY_MS)
+        }
     }
 
     fun reloadConfig() {
@@ -375,7 +375,7 @@ class RestApi(
     private fun onReloadConfigComplete(configResult: String) {
         val configParseSuccess: Boolean
         synchronized(configLock) {
-            config = gson.fromJson(configResult, Config::class.java)
+            config = jsonCodec.decodeFromString(configResult)
             configParseSuccess = config != null
         }
         if (!configParseSuccess) {
@@ -384,14 +384,14 @@ class RestApi(
         Log.d(TAG, "onReloadConfigComplete: Successfully parsed configuration.")
 
         synchronized(configLock) {
-            val logRemoteIgnoredDevices = gson.toJson(config!!.remoteIgnoredDevices)
+            val logRemoteIgnoredDevices = jsonCodec.encodeToString(config!!.remoteIgnoredDevices)
             if (logRemoteIgnoredDevices != "[]") {
                 LogV("ORCC: remoteIgnoredDevices = $logRemoteIgnoredDevices")
             }
 
             // Loop through devices to get ignoredFolders per device.
             for (device in getDevices(false)) {
-                val logIgnoredFolders = gson.toJson(device.ignoredFolders)
+                val logIgnoredFolders = jsonCodec.encodeToString(device.ignoredFolders)
                 if (logIgnoredFolders != "[]") {
                     LogV("ORCC: device[${device.displayName}].ignoredFolders = $logIgnoredFolders")
                 }
@@ -399,10 +399,9 @@ class RestApi(
         }
 
         apiGet(ApiClient.URI_PENDING_DEVICES, null, { result ->
-            val jsonObject = JsonParser.parseString(result).asJsonObject
-            for (deviceEntry in jsonObject.entrySet()) {
-                val resultDeviceId = deviceEntry.key ?: continue
-                val pendingDevice = gson.fromJson(deviceEntry.value, PendingDevice::class.java)
+            val pendingDevices = jsonCodec.parseToJsonElement(result).jsonObject
+            for ((resultDeviceId, deviceValue) in pendingDevices) {
+                val pendingDevice = jsonCodec.decodeFromJsonElement<PendingDevice>(deviceValue)
                 if (pendingDevice.time == null) {
                     continue
                 }
@@ -415,13 +414,11 @@ class RestApi(
             }
         }, { })
         apiGet(ApiClient.URI_PENDING_FOLDERS, null, { result ->
-            val jsonObject = JsonParser.parseString(result).asJsonObject
-            for (folderEntry in jsonObject.entrySet()) {
-                val resultFolderId = folderEntry.key ?: continue
-                val jsonObjectOfferedBy = folderEntry.value.asJsonObject.get("offeredBy").asJsonObject
-                for (offeredByEntry in jsonObjectOfferedBy.entrySet()) {
-                    val offeredByDeviceId = offeredByEntry.key ?: continue
-                    val pendingFolder = gson.fromJson(offeredByEntry.value, PendingFolder::class.java)
+            val pendingFolders = jsonCodec.parseToJsonElement(result).jsonObject
+            for ((resultFolderId, folderValue) in pendingFolders) {
+                val offeredBy = folderValue.jsonObject["offeredBy"]?.jsonObject ?: continue
+                for ((offeredByDeviceId, offeredByValue) in offeredBy) {
+                    val pendingFolder = jsonCodec.decodeFromJsonElement<PendingFolder>(offeredByValue)
                     Log.d(TAG, "ORCC: resultFolderId = $resultFolderId ('${pendingFolder.label}')")
                     val matchingDevice = getDevices(false).firstOrNull {
                         it.deviceID == offeredByDeviceId
@@ -456,7 +453,7 @@ class RestApi(
                 apiGet(ApiClient.URI_DB_COMPLETION,
                     params("device" to device.deviceID, "folder" to folder.id),
                     { result ->
-                        val completionInfo = gson.fromJson(result, CompletionInfo::class.java)
+                        val completionInfo = jsonCodec.decodeFromString<CompletionInfo>(result)
                         LogV("ORCC: /rest/db/completion: folder=${folder.id}" +
                             ", device=${device.displayName}" +
                             ", completion=${completionInfo.completion}" +
@@ -485,9 +482,10 @@ class RestApi(
             apiGet(ApiClient.URI_SYSTEM_LOGLEVELS, null, { result ->
                 try {
                     val facilitiesToStore = HashSet<String>()
-                    val json = JsonParser.parseString(result).asJsonObject
-                    val jsonFacilities = json.getAsJsonObject("packages")
-                    for (facilityName in jsonFacilities.keySet()) {
+                    val logLevels = jsonCodec.parseToJsonElement(result).jsonObject
+                    val jsonFacilities = logLevels["packages"]?.jsonObject
+                        ?: throw IllegalStateException("Missing packages in log levels response")
+                    for (facilityName in jsonFacilities.keys) {
                         facilitiesToStore.add(facilityName)
                     }
                     PreferenceManager.getDefaultSharedPreferences(context).edit()
@@ -560,7 +558,7 @@ class RestApi(
                     ignoredFolder.label = folderLabel ?: ""
                     ignoredFolder.time = getLocalZonedDateTime()
                     device.ignoredFolders!!.add(ignoredFolder)
-                    LogV("ignoreFolder: device.ignoredFolders = ${gson.toJson(device.ignoredFolders)}")
+                    LogV("ignoreFolder: device.ignoredFolders = ${jsonCodec.encodeToString(device.ignoredFolders)}")
                     sendConfig()
                     Log.d(TAG, "Ignored folder [$folderId] announced by device [$deviceId]")
 
@@ -646,7 +644,7 @@ class RestApi(
     fun sendConfig() {
         val jsonConfig: String
         synchronized(configLock) {
-            jsonConfig = gson.toJson(config)
+            jsonConfig = jsonCodec.encodeToString(config)
         }
         apiPost(ApiClient.URI_SYSTEM_CONFIG, null, jsonConfig)
         url = webGuiUrl
@@ -689,7 +687,7 @@ class RestApi(
     val folders: List<Folder>
         get() {
             val folders: List<Folder> = synchronized(configLock) {
-                Util.deepCopy(config!!.folders!!, object : TypeToken<List<Folder>>() {}.type)
+                deepCopy(config!!.folders!!)
             }
             for (folder in folders) {
                 if (folder.path.startsWith("~/")) {
@@ -797,7 +795,7 @@ class RestApi(
      */
     fun getDevices(includeLocal: Boolean): List<Device> {
         val devices = synchronized(configLock) {
-            Util.deepCopy(config!!.devices!!, object : TypeToken<List<Device>>() {}.type)
+            deepCopy(config!!.devices!!)
         }
 
         val iterator = devices.iterator()
@@ -821,7 +819,7 @@ class RestApi(
             LogV("getLocalDevice: Looking for local device ID $localDeviceId")
             for (d in devices) {
                 if (d.deviceID == localDeviceId) {
-                    return Util.deepCopy(d, Device::class.java)
+                    return deepCopy(d)
                 }
             }
             throw RuntimeException("RestApi.getLocalDevice: Failed to get the local device crucial to continuing execution.")
@@ -860,12 +858,12 @@ class RestApi(
 
     val options: Options
         get() = synchronized(configLock) {
-            Util.deepCopy(config!!.options!!, Options::class.java)
+            deepCopy(config!!.options!!)
         }
 
     val gui: Gui
         get() = synchronized(configLock) {
-            Util.deepCopy(config!!.gui!!, Gui::class.java)
+            deepCopy(config!!.gui!!)
         }
 
     fun editSettings(newGui: Gui, newOptions: Options) {
@@ -888,7 +886,7 @@ class RestApi(
     fun getSystemStatus(listener: OnResultListener1<SystemStatus>) {
         apiGet(ApiClient.URI_SYSTEM_STATUS, null, { result ->
             try {
-                val systemStatus = gson.fromJson(result, SystemStatus::class.java)
+                val systemStatus = jsonCodec.decodeFromString<SystemStatus>(result)
                 listener.onResult(systemStatus)
             } catch (e: Exception) {
                 Log.e(TAG, "getSystemStatus: Parsing REST API result failed. result=$result", e)
@@ -902,7 +900,7 @@ class RestApi(
      */
     suspend fun fetchSystemStatus(): SystemStatus {
         val result = clientFor(url).get(ApiClient.URI_SYSTEM_STATUS)
-        return gson.fromJson(result, SystemStatus::class.java)
+        return jsonCodec.decodeFromString(result)
     }
 
     /**
@@ -913,9 +911,8 @@ class RestApi(
      * cache-miss-triggered fire-and-forget path.
      */
     suspend fun refreshRemoteDeviceStatuses() {
-        val connections = gson.fromJson(
-            clientFor(url).get(ApiClient.URI_CONNECTIONS),
-            Connections::class.java
+        val connections = jsonCodec.decodeFromString<Connections>(
+            clientFor(url).get(ApiClient.URI_CONNECTIONS)
         )
         calculateConnectionStats(connections)
         storeDeviceStatuses(connections)
@@ -934,10 +931,9 @@ class RestApi(
     }
 
     private fun storeDeviceLastSeenStats(result: String) {
-        val jsonObject = JsonParser.parseString(result).asJsonObject
-        for (entry in jsonObject.entrySet()) {
-            val resultDeviceId = entry.key
-            val deviceStat = gson.fromJson(entry.value, DeviceStat::class.java)
+        val deviceStats = jsonCodec.parseToJsonElement(result).jsonObject
+        for ((resultDeviceId, statValue) in deviceStats) {
+            val deviceStat = jsonCodec.decodeFromJsonElement<DeviceStat>(statValue)
             PreferenceManager.getDefaultSharedPreferences(context).edit()
                 .putString(Constants.PREF_CACHE_DEVICE_LASTSEEN_PREFIX + resultDeviceId, deviceStat.lastSeen)
                 .apply()
@@ -954,10 +950,8 @@ class RestApi(
      */
     fun getDiscoveredDevices(listener: OnResultListener1<Map<String, DiscoveredDevice>>) {
         apiGet(ApiClient.URI_SYSTEM_DISCOVERY, null, { result ->
-            val discoveredDevices: MutableMap<String, DiscoveredDevice> = gson.fromJson(
-                result,
-                object : TypeToken<Map<String, DiscoveredDevice>>() {}.type
-            )
+            val discoveredDevices: MutableMap<String, DiscoveredDevice> =
+                jsonCodec.decodeFromString(result)
             if (Constants.ENABLE_TEST_DATA) {
                 val fakeDiscoveredDevice = DiscoveredDevice()
                 fakeDiscoveredDevice.addresses = arrayOf("tcp4://192.168.178.10:40004")
@@ -973,7 +967,7 @@ class RestApi(
      */
     fun getFolderIgnoreList(folderId: String, listener: OnResultListener1<FolderIgnoreList>) {
         apiGet(ApiClient.URI_DB_IGNORES, params("folder" to folderId), { result ->
-            val folderIgnoreList = gson.fromJson(result, FolderIgnoreList::class.java)
+            val folderIgnoreList = jsonCodec.decodeFromString<FolderIgnoreList>(result)
             listener.onResult(folderIgnoreList)
         }, { })
     }
@@ -985,7 +979,7 @@ class RestApi(
         val folderIgnoreList = FolderIgnoreList()
         folderIgnoreList.ignore = ignore
         apiPost(ApiClient.URI_DB_IGNORES, params("folder" to folderId),
-            gson.toJson(folderIgnoreList))
+            jsonCodec.encodeToString(folderIgnoreList))
     }
 
     /**
@@ -1003,7 +997,7 @@ class RestApi(
             apiGet(ApiClient.URI_CONNECTIONS, null, { result ->
                 // We got connection status information for ALL devices instead of one.
                 // It does not hurt storing all of them.
-                val connections = gson.fromJson(result, Connections::class.java)
+                val connections = jsonCodec.decodeFromString<Connections>(result)
                 calculateConnectionStats(connections)
                 storeDeviceStatuses(connections)
                 onTotalSyncCompletionChange()
@@ -1028,7 +1022,7 @@ class RestApi(
     val totalConnectionStatistic: Connection
         get() {
             val prevConnections = previousConnections ?: return Connection()
-            return Util.deepCopy(prevConnections.total!!, Connection::class.java)
+            return deepCopy(prevConnections.total!!)
         }
 
     /**
@@ -1039,7 +1033,7 @@ class RestApi(
         val msElapsed = now - previousConnectionTime
         var connections = connections
         if (msElapsed < Constants.REST_UPDATE_INTERVAL) {
-            connections = Util.deepCopy(previousConnections!!, Connections::class.java)
+            connections = deepCopy(previousConnections!!)
             return
         }
 
@@ -1089,18 +1083,18 @@ class RestApi(
     fun getEvents(sinceId: Long, limit: Long, listener: OnReceiveEventListener) {
         val params = params("since" to sinceId.toString(), "limit" to limit.toString())
         apiGet(ApiClient.URI_EVENTS, params, { result ->
-            val jsonEvents = JsonParser.parseString(result).asJsonArray
+            val jsonEvents = jsonCodec.parseToJsonElement(result).jsonArray
             var lastId: Long = 0
 
-            for (json in jsonEvents) {
+            for (eventElement in jsonEvents) {
                 try {
-                    val event = gson.fromJson(json, Event::class.java)
+                    val event = jsonCodec.decodeFromJsonElement<Event>(eventElement)
                     if (lastId < event.id) {
                         lastId = event.id.toLong()
                     }
-                    listener.onEvent(event, json)
-                } catch (ex: JsonSyntaxException) {
-                    Log.e(TAG, "getEvents: Skipping event due to JsonSyntaxException, raw=[$json]")
+                    listener.onEvent(event, eventElement)
+                } catch (ex: SerializationException) {
+                    Log.e(TAG, "getEvents: Skipping event due to SerializationException, raw=[$eventElement]", ex)
                 }
             }
 
@@ -1113,9 +1107,9 @@ class RestApi(
     /**
      * Returns status information about the folder with the given id from cache.
      */
-    fun getFolderStatus(folderId: String): Map.Entry<FolderStatus, CachedFolderStatus> {
+    fun getFolderStatus(folderId: String): LocalCompletion.FolderStatusEntry {
         val cacheEntry = localCompletion.getFolderStatus(folderId)
-        if (cacheEntry.key.stateChanged.isEmpty()) {
+        if (cacheEntry.folderStatus.stateChanged.isEmpty()) {
             // Cache miss because we haven't received a "FolderSummary" event yet.
             // Query the required information so it will be available on a future call
             // to this function.
@@ -1129,7 +1123,7 @@ class RestApi(
                 localCompletion.setFolderStatus(
                     folderId,
                     folder.paused,
-                    gson.fromJson(result, FolderStatus::class.java)
+                    jsonCodec.decodeFromString<FolderStatus>(result)
                 )
             }, { })
         }
@@ -1243,13 +1237,13 @@ class RestApi(
         var planOnFolderSyncCompleted = false
 
         val cacheEntry = localCompletion.getFolderStatus(folderId)
-        val folderStatus = cacheEntry.key
+        val folderStatus = cacheEntry.folderStatus
         val folderIsSyncing = folderStatus.state.contains("sync")
         if (remoteCompletionInfo.completion == 100.0) {
             if (!folderIsSyncing) {
                 planGetSyncConflictFiles = true
 
-                val cachedFolderStatus = cacheEntry.value
+                val cachedFolderStatus = cacheEntry.cachedFolderStatus
                 if (cachedFolderStatus.remoteIndexUpdated) {
                     localCompletion.setRemoteIndexUpdated(folderId, false)
                     planOnFolderSyncCompleted = true
@@ -1319,9 +1313,9 @@ class RestApi(
     }
 
     fun updateLocalFolderState(folderId: String?, newState: String?) {
-        val cacheEntry = localCompletion.getFolderStatus(folderId ?: return)
-        cacheEntry.key.state = newState ?: ""
-        localCompletion.setFolderStatus(folderId, cacheEntry.key)
+        val id = folderId ?: return
+        val cacheEntry = localCompletion.getFolderStatus(id)
+        localCompletion.setFolderStatus(id, cacheEntry.folderStatus.copy(state = newState ?: ""))
     }
 
     fun updateRemoteDeviceConnected(deviceId: String?, newConnected: Boolean) {
@@ -1344,9 +1338,7 @@ class RestApi(
      */
     fun getUsageReport(listener: OnResultListener1<String>) {
         apiGet(ApiClient.URI_REPORT, null, { result ->
-            val json = JsonParser.parseString(result)
-            val gson = GsonBuilder().setPrettyPrinting().create()
-            listener.onResult(gson.toJson(json))
+            listener.onResult(prettyJson.encodeToString(jsonCodec.parseToJsonElement(result)))
         }, { })
     }
 

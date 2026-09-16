@@ -7,7 +7,7 @@ import android.content.Context
 import android.os.PersistableBundle
 import android.util.Log
 
-import com.nutomic.syncthingandroid.service.RunConditionMonitor.Companion.EXTRA_BEGIN_ACTIVE_TIME_WINDOW
+import com.nutomic.syncthingandroid.service.RunConditionEvents.EXTRA_BEGIN_ACTIVE_TIME_WINDOW
 import com.nutomic.syncthingandroid.service.SyncTriggerJobService
 
 object JobUtils {

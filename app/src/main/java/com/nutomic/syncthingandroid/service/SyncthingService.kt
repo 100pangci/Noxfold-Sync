@@ -3,7 +3,6 @@ package com.nutomic.syncthingandroid.service
 import android.app.Service
 import android.content.Intent
 import android.content.SharedPreferences
-import android.os.Handler
 import android.os.IBinder
 import android.util.Log
 import com.nutomic.syncthingandroid.R
@@ -20,8 +19,9 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.util.HashSet
-import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,8 +29,25 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 private const val TAG = "SyncthingService"
+
+/**
+ * Serializes one blocking binary lifecycle operation (startup stale-binary cleanup or
+ * shutdown kill/join) through [mutex] and executes it on [dispatcher].
+ *
+ * This preserves the semantics of the previous single-thread executor: a startup cleanup
+ * and a shutdown kill can never overlap, and multiple requests run in submission order
+ * (the coroutine [Mutex] serves waiters FIFO). [dispatcher] is injectable for tests.
+ */
+internal suspend fun <T> runBinaryWorkSerialized(
+    mutex: Mutex,
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    block: suspend () -> T,
+): T = mutex.withLock { withContext(dispatcher) { block() } }
 
 /**
  * Interval in ms, at which connections to the web gui are performed on first start
@@ -169,21 +186,21 @@ class SyncthingService : Service() {
 
     private lateinit var configRouter: ConfigRouter
     private var config: ConfigXml? = null
-    private var syncthingRunnableThread: Thread? = null
+    private var syncthingRunnableJob: Job? = null
 
     /**
-     * Serializes the blocking kill/join work of the native binary off the main thread.
-     * Shutdown and old-instance cleanup jobs run here in FIFO order; their continuations
-     * are posted back to [handler] (main thread).
+     * Serializes the blocking binary lifecycle work off the main thread: startup
+     * stale-binary cleanup and shutdown kill/join both run through
+     * [runBinaryWorkSerialized]. This keeps the semantics of the previous single-thread
+     * executor - the two can never overlap and requests are served in FIFO order (the
+     * coroutine [Mutex] is fair). Continuations stay on [shutdownScope] (main thread).
      */
-    private val shutdownExecutor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "SyncthingShutdown")
-    }
+    private val shutdownMutex = Mutex()
 
     /**
-     * Main-thread-only guard: true while a kill by binary name is queued or running on
-     * [shutdownExecutor]. [launchStartupTask] defers while this is set, so a freshly
-     * spawned binary can never race a name-based kill aimed at the previous instance.
+     * Main-thread-only guard: true while a kill by binary name is queued or running via
+     * [shutdownMutex]. [launchStartupTask] defers while this is set, so a freshly spawned
+     * binary can never race a name-based kill aimed at the previous instance.
      */
     private var binaryKillPending = false
 
@@ -194,8 +211,6 @@ class SyncthingService : Service() {
      */
     private var portBusyRetryCount = 0
 
-    private lateinit var handler: Handler
-
     private val onServiceStateChangeListeners = HashSet<OnServiceStateChangeListener>()
     private val binder = SyncthingServiceBinder(this)
 
@@ -204,6 +219,15 @@ class SyncthingService : Service() {
      * main thread like the old Volley/PollWebGuiAvailableTask path did.
      */
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /**
+     * Scope for the blocking binary kill/join and old-instance cleanup. Deliberately not
+     * cancelled in [onDestroy] (unlike [serviceScope]): the native process must still be
+     * stopped when the service is torn down, and a second [shutdownToState] call must not
+     * abort an already running kill. Coroutines on it simply drain and are then collected.
+     */
+    private val shutdownScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     private var webGuiPollJob: Job? = null
 
     var api: RestApi? = null
@@ -275,9 +299,8 @@ class SyncthingService : Service() {
         // possible first su spawn with an authorization dialog) here on the main thread
         // would block startup and risk ANR.
         configRouter = ConfigRouter(this)
-        handler = Handler()
         configBackupManager = ConfigBackupManager(this, preferences, enableVerboseLog)
-        httpsCertManager = HttpsCertManager(this, handler)
+        httpsCertManager = HttpsCertManager(this, serviceScope)
 
         // If runtime permissions are revoked, android kills and restarts the service.
         // We need to recheck if we still have the storage permission.
@@ -377,9 +400,14 @@ class SyncthingService : Service() {
             // 3. Relaunch syncthing native if it was previously running.
             Log.i(TAG, "Invoking reset of database")
             val resetDatabaseAndRestart = {
-                SyncthingRunnable(this, SyncthingRunnable.Command.resetdatabase).run()
-                if (lastDeterminedShouldRun) {
-                    launchStartupTask(SyncthingRunnable.Command.main)
+                serviceScope.launch {
+                    withContext(Dispatchers.IO) {
+                        SyncthingRunnable(this@SyncthingService, SyncthingRunnable.Command.resetdatabase)
+                            .run(returnStdOut = false)
+                    }
+                    if (lastDeterminedShouldRun) {
+                        launchStartupTask(SyncthingRunnable.Command.main)
+                    }
                 }
             }
             if (currentState != State.DISABLED) {
@@ -575,7 +603,10 @@ class SyncthingService : Service() {
         if (binaryKillPending) {
             // A kill by binary name (shutdown or old-instance cleanup) is still in flight;
             // spawning now could get the new binary SIGINTed by that kill.
-            handler.postDelayed({ launchStartupTask(srCommand) }, SHUTDOWN_RETRY_DELAY_MS)
+            shutdownScope.launch {
+                delay(SHUTDOWN_RETRY_DELAY_MS)
+                launchStartupTask(srCommand)
+            }
             return
         }
 
@@ -612,7 +643,7 @@ class SyncthingService : Service() {
         }
 
         // Check syncthingRunnable lifecycle and create singleton.
-        if (syncthingRunnable != null || syncthingRunnableThread != null) {
+        if (syncthingRunnable != null || syncthingRunnableJob != null) {
             Log.e(TAG, "onStartupTaskCompleteListener: Syncthing binary lifecycle violated")
             return
         }
@@ -620,48 +651,55 @@ class SyncthingService : Service() {
         syncthingRunnable = runnable
 
         // End any still-running old instance (eg left over from an in-place app upgrade)
-        // on the shutdown executor, then spawn the new binary from the main thread. The
+        // on the shutdown mutex, then spawn the new binary from the main thread. The
         // cleanup kills by process name, so spawning must wait for it to complete.
         binaryKillPending = true
-        shutdownExecutor.execute {
-            // Safety net for starts after a root-mode session (e.g. the app process was
-            // killed while the root-uid core was up): config and key material are root-owned
-            // with explicit 0600 modes and must be handed back to the app UID before the
-            // config is parsed further below. Runs here on the background executor - the
-            // recursive chown and a possible first su spawn (Magisk dialog) must never run
-            // on the main thread. Detected via the config file's actual owner - not the
-            // launch marker, which a failed non-root launch would have reset. Marker is
-            // intentionally kept: killStaleBinary still needs root to stop an orphaned
-            // root core; the non-root launch path clears it.
-            if (RootAccess.appStorageOwnedByRoot(this)) {
-                Log.i(TAG, "Previous core ran as root; returning app storage to app ownership")
-                RootAccess.handBackStorage(this)
-            }
-            killStaleBinary()
-            // Probe the WebUI port AFTER the stale-binary kill, on this background
-            // thread: a loopback TCP connect is a network op and must not run on the
-            // main thread, and only now do we know whether the kill actually freed the
-            // port. A root-uid core survives an app force-stop and ps-based matching
-            // does not always find it, so the kill above can be a no-op even with a
-            // stale instance still bound to our port - spawning into it would just
-            // exit with code 1 ("another instance may be already running").
-            val portOccupied = Util.isTcpPortListening(config.webGuiBindPort)
-            handler.post {
-                binaryKillPending = false
-                if (syncthingRunnable == null) {
-                    // shutdownToState ran while the cleanup was in flight and consumed the
-                    // pending runnable - the startup was aborted, do not spawn.
-                    Log.i(TAG, "launchStartupTask: Startup aborted, binary was shut down in the meantime.")
-                    return@post
+        shutdownScope.launch {
+            val portOccupied = runBinaryWorkSerialized(shutdownMutex) {
+                // Safety net for starts after a root-mode session (e.g. the app process was
+                // killed while the root-uid core was up): config and key material are root-owned
+                // with explicit 0600 modes and must be handed back to the app UID before the
+                // config is parsed further below. Runs on the IO dispatcher - the recursive
+                // chown and a possible first su spawn (Magisk dialog) must never run on the
+                // main thread. Detected via the config file's actual owner - not the launch
+                // marker, which a failed non-root launch would have reset. Marker is
+                // intentionally kept: killStaleBinary still needs root to stop an orphaned
+                // root core; the non-root launch path clears it.
+                if (RootAccess.appStorageOwnedByRoot(this@SyncthingService)) {
+                    Log.i(TAG, "Previous core ran as root; returning app storage to app ownership")
+                    RootAccess.handBackStorage(this@SyncthingService)
                 }
-                if (portOccupied) {
-                    onWebUiPortOccupied(config.webGuiBindPort)
-                    return@post
-                }
-                portBusyRetryCount = 0
-                startBinaryThread(runnable, config)
+                killStaleBinary()
+                // Probe the WebUI port AFTER the stale-binary kill: a loopback TCP connect is
+                // a network op and must not run on the main thread, and only now do we know
+                // whether the kill actually freed the port. A root-uid core survives an app
+                // force-stop and ps-based matching does not always find it, so the kill above
+                // can be a no-op even with a stale instance still bound to our port - spawning
+                // into it would just exit with code 1 ("another instance may be already running").
+                Util.isTcpPortListening(config.webGuiBindPort)
             }
+            binaryKillPending = false
+            if (syncthingRunnable == null) {
+                // shutdownToState ran while the cleanup was in flight and consumed the
+                // pending runnable - the startup was aborted, do not spawn.
+                Log.i(TAG, "launchStartupTask: Startup aborted, binary was shut down in the meantime.")
+                return@launch
+            }
+            if (portOccupied) {
+                onWebUiPortOccupied(config.webGuiBindPort)
+                return@launch
+            }
+            portBusyRetryCount = 0
+            startBinary(runnable, config)
         }
+    }
+
+    /**
+     * [launchStartupTask] from a background thread (e.g. config restore): hops to the
+     * main thread first, because the startup path touches main-thread-only state.
+     */
+    internal fun launchStartupTaskOnMainThread(srCommand: SyncthingRunnable.Command) {
+        serviceScope.launch { launchStartupTask(srCommand) }
     }
 
     /**
@@ -704,7 +742,8 @@ class SyncthingService : Service() {
             Log.w(TAG, "scheduleRestartRetry: Giving up after $attempt retries in state $currentState")
             return
         }
-        handler.postDelayed({
+        serviceScope.launch {
+            delay(SHUTDOWN_RETRY_DELAY_MS)
             when (currentState) {
                 State.ACTIVE -> shutdownToState(State.INIT) {
                     launchStartupTask(SyncthingRunnable.Command.main)
@@ -713,18 +752,26 @@ class SyncthingService : Service() {
                 else -> Log.i(TAG,
                         "Deferred restart aborted in state $currentState - core is not running")
             }
-        }, SHUTDOWN_RETRY_DELAY_MS)
+        }
     }
 
-    private fun startBinaryThread(runnable: SyncthingRunnable, config: ConfigXml) {
-        // Start the syncthing binary in a separate thread.
-        val syncthingRunnableThread = Thread(runnable)
-        syncthingRunnableThread.setUncaughtExceptionHandler { _, _ ->
-            Log.e(TAG, "syncthingRunnableThread: Uncaught exception [ExecutableNotFoundException]")
-            notificationHandler.showCrashedNotification(R.string.executable_not_found, Constants.FILENAME_SYNCTHING_BINARY)
+    private fun startBinary(runnable: SyncthingRunnable, config: ConfigXml) {
+        // Run the syncthing binary on the IO dispatcher. shutdownScope (not serviceScope):
+        // the job must survive serviceScope.cancel() in onDestroy so the shutdown path can
+        // still join it after killing the process.
+        syncthingRunnableJob = shutdownScope.launch(Dispatchers.IO) {
+            try {
+                runnable.execute(returnStdOut = false)
+            } catch (e: SyncthingRunnable.ExecutableNotFoundException) {
+                Log.e(TAG, "syncthingRunnable: Uncaught exception [ExecutableNotFoundException]", e)
+                withContext(Dispatchers.Main.immediate) {
+                    notificationHandler.showCrashedNotification(
+                        R.string.executable_not_found,
+                        Constants.FILENAME_SYNCTHING_BINARY
+                    )
+                }
+            }
         }
-        this.syncthingRunnableThread = syncthingRunnableThread
-        syncthingRunnableThread.start()
 
         // Wait for the web-gui of the native syncthing binary to come online.
         //
@@ -865,36 +912,45 @@ class SyncthingService : Service() {
      * Stop SyncthingNative and all helpers like event processor and api handler.
      * Sets [currentState] to newState.
      *
-     * The blocking kill/join of the native binary runs on [shutdownExecutor]: the calling
-     * (main) thread returns immediately and [onShutdownComplete] is invoked on the main
-     * thread once the binary has fully exited. Must be called from the main thread.
+     * The blocking kill/join of the native binary runs on [shutdownMutex] + IO: the
+     * calling (main) thread returns immediately and [onShutdownComplete] is invoked on
+     * the main thread once the binary has fully exited. Must be called from the main
+     * thread.
      */
     fun shutdownToState(newState: State, onShutdownComplete: (() -> Unit)? = null) {
         if (currentState == State.STARTING) {
             Log.w(TAG, "Deferring shutdown until State.STARTING was left")
-            handler.postDelayed({ shutdownToState(newState, onShutdownComplete) }, SHUTDOWN_RETRY_DELAY_MS)
+            shutdownScope.launch {
+                delay(SHUTDOWN_RETRY_DELAY_MS)
+                shutdownToState(newState, onShutdownComplete)
+            }
             return
         }
 
         prepareShutdown(newState)
 
         val runnable = syncthingRunnable
-        val runnableThread = syncthingRunnableThread
+        val runnableJob = syncthingRunnableJob
         syncthingRunnable = null
-        syncthingRunnableThread = null
+        syncthingRunnableJob = null
 
         if (runnable == null) {
-            onShutdownComplete?.let { handler.post(it) }
+            // Match the previous Handler.post(): queue the completion for the next main
+            // loop turn instead of running it inline. Dispatchers.Main (not Main.immediate)
+            // always enqueues, even when called from the main thread.
+            onShutdownComplete?.let { complete ->
+                shutdownScope.launch(Dispatchers.Main) { complete() }
+            }
             return
         }
 
         binaryKillPending = true
-        shutdownExecutor.execute {
-            killBinaryAndAwaitExit(runnable, runnableThread)
-            handler.post {
-                binaryKillPending = false
-                onShutdownComplete?.invoke()
+        shutdownScope.launch {
+            runBinaryWorkSerialized(shutdownMutex) {
+                killBinaryAndAwaitExit(runnable, runnableJob)
             }
+            binaryKillPending = false
+            onShutdownComplete?.invoke()
         }
     }
 
@@ -906,18 +962,27 @@ class SyncthingService : Service() {
     fun shutdownToStateBlocking(newState: State) {
         if (currentState == State.STARTING) {
             Log.w(TAG, "Deferring shutdown until State.STARTING was left")
-            handler.postDelayed({ shutdownToStateBlocking(newState) }, SHUTDOWN_RETRY_DELAY_MS)
+            shutdownScope.launch {
+                delay(SHUTDOWN_RETRY_DELAY_MS)
+                shutdownToStateBlocking(newState)
+            }
             return
         }
 
         prepareShutdown(newState)
 
         val runnable = syncthingRunnable ?: return
-        val runnableThread = syncthingRunnableThread
+        val runnableJob = syncthingRunnableJob
         syncthingRunnable = null
-        syncthingRunnableThread = null
+        syncthingRunnableJob = null
 
-        killBinaryAndAwaitExit(runnable, runnableThread)
+        // Mark BEFORE the kill so the runnable's exit watcher sees the flag as soon as
+        // waitFor returns: a graceful shutdown exceeding the kill grace period gets
+        // escalated to SIGKILL by our own killProcess, and the resulting exit 137 must
+        // not be reported as a crash.
+        runnable.markPlannedShutdown()
+        killStaleBinary()
+        runnableJob?.let { awaitJobBlocking(it) }
     }
 
     private fun prepareShutdown(newState: State) {
@@ -943,21 +1008,34 @@ class SyncthingService : Service() {
         }
     }
 
-    private fun killBinaryAndAwaitExit(runnable: SyncthingRunnable, runnableThread: Thread?) {
+    private suspend fun killBinaryAndAwaitExit(runnable: SyncthingRunnable, runnableJob: Job?) {
         // Mark BEFORE the kill so the runnable's exit watcher sees the flag as soon as
         // waitFor returns: a graceful shutdown exceeding the kill grace period gets
         // escalated to SIGKILL by our own killProcess, and the resulting exit 137 must
         // not be reported as a crash.
         runnable.markPlannedShutdown()
         killStaleBinary()
-        runnableThread?.let { thread ->
-            LogV("Waiting for syncthingRunnableThread to finish after killProcess(Syncthing) ...")
-            try {
-                thread.join()
-            } catch (e: InterruptedException) {
-                Log.w(TAG, "syncthingRunnableThread InterruptedException")
-            }
-            Log.d(TAG, "Finished syncthingRunnableThread.")
+        runnableJob?.let { job ->
+            LogV("Waiting for syncthingRunnable to finish after killProcess(Syncthing) ...")
+            job.join()
+            Log.d(TAG, "Finished syncthingRunnable.")
+        }
+    }
+
+    /**
+     * Blocks until [job] completes. Only used by the background-thread
+     * [shutdownToStateBlocking] contract; main-thread callers use [shutdownToState].
+     */
+    private fun awaitJobBlocking(job: Job) {
+        val latch = CountDownLatch(1)
+        job.invokeOnCompletion { latch.countDown() }
+        try {
+            LogV("Waiting for syncthingRunnable to finish after killProcess(Syncthing) ...")
+            latch.await()
+            Log.d(TAG, "Finished syncthingRunnable.")
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            Log.w(TAG, "Waiting for syncthingRunnable interrupted")
         }
     }
 
@@ -1037,8 +1115,8 @@ class SyncthingService : Service() {
         }
         Log.i(TAG, "onServiceStateChange: from $currentState to $newState")
         currentState = newState
-        handler.post {
-            notificationHandler.updatePersistentNotification(this)
+        serviceScope.launch {
+            notificationHandler.updatePersistentNotification(this@SyncthingService)
             val iterator = onServiceStateChangeListeners.iterator()
             while (iterator.hasNext()) {
                 iterator.next().onServiceStateChange(currentState)

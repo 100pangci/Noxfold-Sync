@@ -11,9 +11,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -41,7 +41,7 @@ fun MainActivityDialogsHost() {
     val apiConfigLoaded = api?.isConfigLoaded ?: false
 
     // ---- Device id QR dialog ----
-    val showDeviceIdDialog by resultBus.showDeviceIdDialog.collectAsState()
+    val showDeviceIdDialog by resultBus.showDeviceIdDialog.collectAsStateWithLifecycle()
     val deviceId = showDeviceIdDialog
     if (deviceId != null) {
         val deviceName = remember(deviceId) {
@@ -67,7 +67,7 @@ fun MainActivityDialogsHost() {
     }
 
     // ---- Restart confirmation dialog ----
-    val restartRequested by resultBus.restartRequested.collectAsState()
+    val restartRequested by resultBus.restartRequested.collectAsStateWithLifecycle()
     if (restartRequested) {
         AlertDialog(
             onDismissRequest = { resultBus.restartRequested.value = false },
@@ -104,7 +104,7 @@ fun MainActivityDialogsHost() {
             resultBus.usageReport.value = report
         }
     }
-    val usageReport by resultBus.usageReport.collectAsState()
+    val usageReport by resultBus.usageReport.collectAsStateWithLifecycle()
     val report = usageReport
     if (report != null && api != null) {
         AlertDialog(

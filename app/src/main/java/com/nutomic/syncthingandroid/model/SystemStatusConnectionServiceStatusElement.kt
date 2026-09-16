@@ -1,15 +1,14 @@
 package com.nutomic.syncthingandroid.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * REST API endpoint "/rest/system/status"
- * Part of JSON answer in field {@link SystemStatus#connectionServiceStatus}
- * Public fields on purpose: Gson reflective binding + direct field access from Java tests.
+ * Part of JSON answer in field [SystemStatus.connectionServiceStatus].
  */
-class SystemStatusConnectionServiceStatusElement {
-    @JvmField
-    var error: String? = null
-    @JvmField
-    var lanAddresses: List<String>? = null
-    @JvmField
-    var wanAddresses: List<String>? = null
-}
+@Serializable
+class SystemStatusConnectionServiceStatusElement(
+    var error: String? = null,
+    var lanAddresses: List<String>? = null,
+    var wanAddresses: List<String>? = null,
+)

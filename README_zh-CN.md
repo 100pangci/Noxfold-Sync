@@ -35,6 +35,7 @@
 
 ### 服务层重写
 - 服务层已全部迁移为 Kotlin + 协程 / Flow（`SyncthingService` / `RestApi` / 事件轮询 / 运行条件监视 / `ConfigXml` / 广播接收器 / 快捷设置磁贴 / TLS 信任管理器 / 通知与配置辅助类）——应用源码零 Java。Dagger 已移除，改为手动 DI；Volley/guava 已替换为 OkHttp/标准库。
+- Java 时代的遗留机制也已清理：Gson 换成 kotlinx.serialization（所有模型改为 `@Serializable` 数据类），LocalBroadcastManager 换成进程内 Flow 事件总线，混杂的 Thread/Handler 改为结构化协程。旧存储 API 与少量一次性命令桥是有意保留的。
 
 ### 稳定性与修复
 - 废弃的 `CONNECTIVITY_ACTION` 广播接收迁移到 `NetworkCallback`，`SyncthingService` 职责拆分到专职管理器（HTTPS 证书、配置备份）
@@ -42,6 +43,7 @@
 
 ### 工程化
 - 为核心同步路径（事件处理、运行条件、配置解析）补充 Robolectric 单元测试
+- release 构建开启 R8 + 资源压缩，原生产物剥离符号：arm64 APK 从约 31 MB 降到约 16 MB（universal 约 65 MB → 50 MB）
 - CI 完整接管：自动构建 debug / release 并签名
 
 ## 下载
@@ -95,11 +97,11 @@ python3 scripts/install_minimum_android_sdk_prerequisites.py
 | UI | Kotlin, Jetpack Compose, Material 3, Navigation 3 |
 | 服务层 | Kotlin + 协程 / Flow（前台服务、REST API、事件轮询、运行条件监视、配置 XML、广播接收器、快捷设置磁贴、通知与备份）——零 Java |
 | 同步核心 | Syncthing (Go, git submodule)，打包为 `libsyncthingnative.so`，以前台服务的子进程方式运行 |
-| DI / 数据 | 手动 DI, Gson, OkHttp, SharedPreferences |
+| DI / 数据 | 手动 DI, kotlinx.serialization, OkHttp, SharedPreferences |
 | 可选 Root | libsu（su 检测、root shell、存储所有权交还） |
 | 构建 | Gradle (Kotlin DSL) + Version Catalog, JDK 21, AGP 9.x |
 
-- minSdk 23 (Android 6.0) / targetSdk 36 / compileSdk 37
+- minSdk 26 (Android 8.0) / targetSdk 36 / compileSdk 37
 
 ## 致谢
 

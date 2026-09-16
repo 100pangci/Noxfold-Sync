@@ -89,8 +89,8 @@ fun buildFolderUiModels(
 
         val folderStatusEntry = if (api != null && apiConfigLoaded) api.getFolderStatus(folder.id) else null
         if (folderStatusEntry != null) {
-            val folderStatus = folderStatusEntry.key
-            val cached = folderStatusEntry.value
+            val folderStatus = folderStatusEntry.folderStatus
+            val cached = folderStatusEntry.cachedFolderStatus
 
             val failedItems = folderStatus.errors > 0
             val neededItems = folderStatus.needFiles + folderStatus.needDirectories +

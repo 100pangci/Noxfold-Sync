@@ -9,7 +9,6 @@ import android.net.Proxy
 import android.net.Uri
 import android.net.http.SslCertificate
 import android.net.http.SslError
-import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcelable
@@ -247,11 +246,7 @@ class WebGuiActivity : SyncthingActivity(), SyncthingService.OnServiceStateChang
 
     private fun startSyncthingService() {
         val serviceIntent = Intent(this, SyncthingService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        startForegroundService(serviceIntent)
     }
 
     private fun registerServiceListener(service: SyncthingService) {

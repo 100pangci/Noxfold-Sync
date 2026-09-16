@@ -302,7 +302,7 @@ class RestApiTest {
                 throw AssertionError("unexpected onError")
             }
             override fun onEvent(event: com.nutomic.syncthingandroid.model.Event,
-                                 json: com.google.gson.JsonElement) {
+                                 json: kotlinx.serialization.json.JsonElement) {
                 eventTypes.add(event.type)
             }
             override fun onDone(lastId_: Long) {
@@ -331,7 +331,7 @@ class RestApiTest {
                 error.countDown()
             }
             override fun onEvent(event: com.nutomic.syncthingandroid.model.Event,
-                                 json: com.google.gson.JsonElement) {
+                                 json: kotlinx.serialization.json.JsonElement) {
                 throw AssertionError("unexpected onEvent")
             }
             override fun onDone(lastId: Long) {

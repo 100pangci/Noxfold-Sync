@@ -165,7 +165,7 @@ class SyncthingRunnableTest {
     fun normalExitCodes_takeNoServiceAction() {
         for (exitCode in intArrayOf(0)) {
             writeBinary("exit $exitCode")
-            newRunnable(Command.main).run()
+            newRunnable(Command.main).run(returnStdOut = false)
             assertNull("exit $exitCode: unexpected service intent", nextStartedService())
             // No crash notification (id 9) is posted for normal exits.
             assertFalse("exit $exitCode: unexpected crash notification", notificationCount() > 0)
@@ -175,7 +175,7 @@ class SyncthingRunnableTest {
     @Test
     fun restartExitCode_requestsServiceRestart() {
         writeBinary("exit 3")
-        newRunnable(Command.main).run()
+        newRunnable(Command.main).run(returnStdOut = false)
         val intent = nextStartedService()
         assertNotNull(intent)
         assertEquals(SyncthingService.ACTION_RESTART, intent!!.action)
@@ -190,7 +190,7 @@ class SyncthingRunnableTest {
         val runnable = newRunnable(Command.main)
         runnable.markPlannedShutdown()
         writeBinary("exit 137")
-        runnable.run()
+        runnable.run(returnStdOut = false)
         assertNull("planned shutdown: unexpected stop intent", nextStartedService())
         assertFalse("planned shutdown: unexpected crash notification", notificationCount() > 0)
     }
@@ -199,7 +199,7 @@ class SyncthingRunnableTest {
     fun crashExitCodes_stopServiceWithExtraAndShowCrashNotification() {
         for (exitCode in intArrayOf(1, 2, 9, 64, 137, 7)) {   // 7 covers the default branch; 137 = SIGKILL.
             writeBinary("exit $exitCode")
-            newRunnable(Command.main).run()
+            newRunnable(Command.main).run(returnStdOut = false)
             val intent = nextStartedService()
             assertNotNull("exit $exitCode: stop intent missing", intent)
             assertEquals(SyncthingService.ACTION_STOP, intent!!.action)
@@ -257,19 +257,9 @@ class SyncthingRunnableTest {
     }
 
     @Test
-    fun runnableRun_wrapsExecutableNotFoundInRuntimeException() {
-        try {
-            newRunnable(Command.main).run()
-            fail("Expected RuntimeException")
-        } catch (e: RuntimeException) {
-            assertTrue(e.message!!.contains(Constants.FILENAME_SYNCTHING_BINARY))
-        }
-    }
-
-    @Test
     fun nativeOutput_isAppendedToSyncthingLogFile() {
         writeBinary("echo out-line-abc; echo err-line-xyz >&2")
-        newRunnable(Command.main).run()
+        newRunnable(Command.main).run(returnStdOut = false)
         val content = File(context.filesDir, "syncthing.log").readText()
         assertTrue("stdout line missing in [${content.take(200)}]", content.contains("out-line-abc"))
         assertTrue("stderr line missing in [${content.take(200)}]", content.contains("err-line-xyz"))
@@ -303,7 +293,7 @@ class SyncthingRunnableTest {
         // Phase5 fix for the "traceless death" gap: the exit code trail must not depend
         // on the verbose log preference.
         writeBinary("exit 7")
-        newRunnable(Command.main).run()
+        newRunnable(Command.main).run(returnStdOut = false)
         val runnableLogs = ShadowLog.getLogs().filter { it.tag == "SyncthingRunnable" }
         assertTrue(
                 "exit code log missing: ${runnableLogs.map { it.msg }}",

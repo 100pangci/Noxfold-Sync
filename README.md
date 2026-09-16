@@ -35,6 +35,7 @@ An intensive rewrite on top of [researchxxl/Syncthing-Fork](https://github.com/r
 
 ### Service Layer Rewrite
 - The service layer is now fully Kotlin + coroutines / Flow (`SyncthingService` / `RestApi` / event polling / run condition monitoring / `ConfigXml` / receivers / quick-settings tiles / TLS trust manager / notification & config helpers) — zero Java left in the app sources. Dagger has been removed in favor of manual DI, and Volley/guava have been replaced by OkHttp/stdlib.
+- The remaining Java-era machinery is gone as well: Gson gave way to kotlinx.serialization (all models are `@Serializable` data holders), LocalBroadcastManager to an in-process Flow event bus, and the mixed thread/handler code to structured coroutines. Legacy storage APIs and a few one-shot command bridges are intentionally kept.
 
 ### Stability & Fixes
 - Migrated the deprecated `CONNECTIVITY_ACTION` receiver to `NetworkCallback`, and split `SyncthingService` responsibilities into dedicated managers (HTTPS cert, config backup)
@@ -42,6 +43,7 @@ An intensive rewrite on top of [researchxxl/Syncthing-Fork](https://github.com/r
 
 ### Engineering
 - Added Robolectric unit tests for core sync paths (event processing, run conditions, config parsing)
+- Release builds run R8 with resource shrinking and symbol-stripped native cores: the arm64 APK shrinks from ~31 MB to ~16 MB (universal ~65 MB to ~50 MB)
 - CI fully takes over: automated debug / release builds with signing
 
 ## Download
@@ -95,11 +97,11 @@ The knowledge base (FAQ, battery optimization, vendor-specific background restri
 | UI | Kotlin, Jetpack Compose, Material 3, Navigation 3 |
 | Service layer | Kotlin + coroutines / Flow (foreground service, REST API, event polling, run condition monitoring, config XML, receivers, quick-settings tiles, notifications & backups) — zero Java |
 | Sync core | Syncthing (Go, git submodule), packaged as `libsyncthingnative.so`, executed as a child process of the foreground service |
-| DI / data | Manual DI, Gson, OkHttp, SharedPreferences |
+| DI / data | Manual DI, kotlinx.serialization, OkHttp, SharedPreferences |
 | Optional root | libsu (su detection, root shell, storage ownership hand-back) |
 | Build | Gradle (Kotlin DSL) + Version Catalog, JDK 21, AGP 9.x |
 
-- minSdk 23 (Android 6.0) / targetSdk 36 / compileSdk 37
+- minSdk 26 (Android 8.0) / targetSdk 36 / compileSdk 37
 
 ## Acknowledgments
 

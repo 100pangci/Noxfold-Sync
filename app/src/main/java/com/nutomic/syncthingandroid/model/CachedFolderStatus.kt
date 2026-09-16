@@ -1,31 +1,26 @@
 package com.nutomic.syncthingandroid.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Caches information frequently needed by the wrapper
  * to save expensive calls to Syncthing's REST API.
  * Vars in class do not correspond to JSON results.
- * Public fields on purpose: Gson reflective binding + direct field access from Java tests.
  */
-class CachedFolderStatus {
+@Serializable
+data class CachedFolderStatus(
     /**
-     * Calculated
+     * Calculated.
      */
-    @JvmField
-    var completion: Double = 100.0
+    var completion: Double = 100.0,
 
     /**
-     * Accessed by setters
+     * Accessed by setters.
      */
-    @JvmField
-    var discoveredConflictFiles: Array<String> = emptyArray()
-    @JvmField
-    var lastItemFinishedAction: String = ""
-    @JvmField
-    var lastItemFinishedItem: String = ""
-    @JvmField
-    var lastItemFinishedTime: String = ""
-    @JvmField
-    var remoteIndexUpdated: Boolean = false
-    @JvmField
-    var paused: Boolean = false
-}
+    var discoveredConflictFiles: Array<String> = emptyArray(),
+    var lastItemFinishedAction: String = "",
+    var lastItemFinishedItem: String = "",
+    var lastItemFinishedTime: String = "",
+    var remoteIndexUpdated: Boolean = false,
+    var paused: Boolean = false,
+)

@@ -1,77 +1,43 @@
 package com.nutomic.syncthingandroid.model
 
-/** Public fields on purpose: Gson reflective binding + direct field access from Java tests. */
-class FolderStatus {
-    @JvmField
-    var error: String = ""
-    @JvmField
-    var errors: Long = 0
-    @JvmField
-    var globalBytes: Long = 0
-    @JvmField
-    var globalDeleted: Long = 0
-    @JvmField
-    var globalDirectories: Long = 0
-    @JvmField
-    var globalFiles: Long = 0
-    @JvmField
-    var globalSymlinks: Long = 0
-    @JvmField
-    var globalTotalItems: Long = 0
-    @JvmField
-    var ignorePatterns: Boolean = false
-    @JvmField
-    var inSyncBytes: Long = 0
-    @JvmField
-    var inSyncFiles: Long = 0
-    @JvmField
-    var invalid: String = ""
-    @JvmField
-    var localBytes: Long = 0
-    @JvmField
-    var localDeleted: Long = 0
-    @JvmField
-    var localDirectories: Long = 0
-    @JvmField
-    var localFiles: Long = 0
-    @JvmField
-    var localSymlinks: Long = 0
-    @JvmField
-    var localTotalItems: Long = 0
-    @JvmField
-    var needBytes: Long = 0
-    @JvmField
-    var needDeletes: Long = 0
-    @JvmField
-    var needDirectories: Long = 0
-    @JvmField
-    var needFiles: Long = 0
-    @JvmField
-    var needSymlinks: Long = 0
-    @JvmField
-    var needTotalItems: Long = 0
-    @JvmField
-    var pullErrors: Long = 0
-    @JvmField
-    var receiveOnlyChangedBytes: Long = 0
-    @JvmField
-    var receiveOnlyChangedDeletes: Long = 0
-    @JvmField
-    var receiveOnlyChangedDirectories: Long = 0
-    @JvmField
-    var receiveOnlyChangedFiles: Long = 0
-    @JvmField
-    var receiveOnlyChangedSymlinks: Long = 0
-    @JvmField
-    var receiveOnlyTotalItems: Long = 0
-    @JvmField
-    var sequence: Long = 0
-    @JvmField
-    var state: String = "idle"
-    @JvmField
-    var stateChanged: String = ""
-    @JvmField
-    var version: Long = 0
-    @JvmField
-    var watchError: String = ""
-}
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class FolderStatus(
+    var error: String = "",
+    var errors: Long = 0,
+    var globalBytes: Long = 0,
+    var globalDeleted: Long = 0,
+    var globalDirectories: Long = 0,
+    var globalFiles: Long = 0,
+    var globalSymlinks: Long = 0,
+    var globalTotalItems: Long = 0,
+    var ignorePatterns: Boolean = false,
+    var inSyncBytes: Long = 0,
+    var inSyncFiles: Long = 0,
+    var invalid: String = "",
+    var localBytes: Long = 0,
+    var localDeleted: Long = 0,
+    var localDirectories: Long = 0,
+    var localFiles: Long = 0,
+    var localSymlinks: Long = 0,
+    var localTotalItems: Long = 0,
+    var needBytes: Long = 0,
+    var needDeletes: Long = 0,
+    var needDirectories: Long = 0,
+    var needFiles: Long = 0,
+    var needSymlinks: Long = 0,
+    var needTotalItems: Long = 0,
+    var pullErrors: Long = 0,
+    var receiveOnlyChangedBytes: Long = 0,
+    var receiveOnlyChangedDeletes: Long = 0,
+    var receiveOnlyChangedDirectories: Long = 0,
+    var receiveOnlyChangedFiles: Long = 0,
+    var receiveOnlyChangedSymlinks: Long = 0,
+    var receiveOnlyTotalItems: Long = 0,
+    var sequence: Long = 0,
+    var state: String = "idle",
+    var stateChanged: String = "",
+    var version: Long = 0,
+    var watchError: String = "",
+)

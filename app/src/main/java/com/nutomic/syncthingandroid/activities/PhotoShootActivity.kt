@@ -25,8 +25,8 @@ import com.nutomic.syncthingandroid.util.FileUtils.ExternalStorageDirType
 import com.nutomic.syncthingandroid.util.PermissionUtil
 import java.io.File
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -136,7 +136,8 @@ class PhotoShootActivity : ThemedAppCompatActivity() {
     }
 
     private fun createImageFile(): File? {
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val timeStamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss", Locale.getDefault())
+            .format(LocalDateTime.now())
         val imageFileName = "IMG_$timeStamp" + "_"
         val storageDir = FileUtils.getExternalFilesDir(this, ExternalStorageDirType.INT_MEDIA, Environment.DIRECTORY_PICTURES)
             ?: return null

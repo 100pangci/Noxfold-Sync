@@ -1,7 +1,5 @@
 package com.nutomic.syncthingandroid.service
 
-import android.content.AsyncQueryHandler
-import android.content.ContentResolver
 import android.content.Context
 import android.content.SharedPreferences
 import android.media.MediaScannerConnection
@@ -10,15 +8,12 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonArray
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.model.Device
 import com.nutomic.syncthingandroid.model.Event
 import com.nutomic.syncthingandroid.model.FolderStatus
+import com.nutomic.syncthingandroid.util.json as jsonCodec
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.coroutineContext
@@ -33,13 +28,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 
 /**
- * Kotlin/coroutines replacement for the former Java [EventProcessor] (phase3).
- *
  * Run by the syncthing service to convert syncthing events into local state updates and
- * notifications. It polls [RestApi.getEvents] and waits for new events, preserving the old
- * polling semantics:
+ * notifications. It polls [RestApi.getEvents] and waits for new events with these semantics:
  *
  *  - The first poll happens one [EVENT_UPDATE_INTERVAL] after [start]; every afterwards poll
  *    is scheduled from the previous round's completion, so overlapping polls are impossible.
@@ -170,19 +170,19 @@ class EventPoller(
                 restApi.reloadConfig()
             }
             "DeviceConnected" -> restApi.updateRemoteDeviceConnected(
-                    event.data?.get("id") as String?,          // deviceId
+                    event.data?.string("id"),                  // deviceId
                     true
             )
             "DeviceDisconnected" -> restApi.updateRemoteDeviceConnected(
-                    event.data?.get("id") as String?,          // deviceId
+                    event.data?.string("id"),                  // deviceId
                     false
             )
             "DevicePaused" -> restApi.updateRemoteDevicePaused(
-                    event.data?.get("device") as String?,      // deviceId
+                    event.data?.string("device"),              // deviceId
                     true
             )
             "DeviceResumed" -> restApi.updateRemoteDevicePaused(
-                    event.data?.get("device") as String?,      // deviceId
+                    event.data?.string("device"),              // deviceId
                     false
             )
             "FolderCompletion" -> onFolderCompletion(event.data)
@@ -191,40 +191,40 @@ class EventPoller(
                 onFolderErrors(json)
             }
             "FolderPaused" -> onFolderPaused(
-                    event.data?.get("id") as String?           // folderId
+                    event.data?.string("id")                   // folderId
             )
             "FolderResumed" -> onFolderResumed(
-                    event.data?.get("id") as String?           // folderId
+                    event.data?.string("id")                   // folderId
             )
             "FolderSummary" -> onFolderSummary(
                     json,
-                    event.data?.get("folder") as String?       // folderId
+                    event.data?.string("folder")               // folderId
             )
             "ItemFinished" -> onItemFinishedEvent(event)
             "LocalIndexUpdated" -> {
                 logV("Event ${event.type}, data ${event.data}")
                 onLocalIndexUpdated(
                         json,
-                        event.data?.get("folder") as String?,  // folderId
+                        event.data?.string("folder"),          // folderId
                         event.time
                 )
             }
             "PendingDevicesChanged" -> {
-                @Suppress("UNCHECKED_CAST")
-                val added = event.data?.get("added") as? List<Map<String, String>>
-                added?.forEach { onPendingDevicesChanged(it) }
+                (event.data?.get("added") as? JsonArray)?.forEach { element ->
+                    (element as? JsonObject)?.let { onPendingDevicesChanged(it) }
+                }
             }
             "PendingFoldersChanged" -> {
-                @Suppress("UNCHECKED_CAST")
-                val added = event.data?.get("added") as? List<Map<String, Any>>
-                added?.forEach { onPendingFoldersChanged(it) }
+                (event.data?.get("added") as? JsonArray)?.forEach { element ->
+                    (element as? JsonObject)?.let { onPendingFoldersChanged(it) }
+                }
             }
             "Ping" -> {
                 // Ignored.
             }
             "StateChanged" -> onStateChanged(
-                    event.data?.get("folder") as String?,      // folderId
-                    event.data?.get("to") as String?
+                    event.data?.string("folder"),              // folderId
+                    event.data?.string("to")
             )
             "DeviceDiscovered",
             "DownloadProgress",
@@ -235,9 +235,9 @@ class EventPoller(
             "LoginAttempt",
             "RemoteDownloadProgress" -> logV("Ignored event ${event.type}, data ${event.data}")
             "RemoteIndexUpdated" -> onRemoteIndexUpdated(
-                    event.data?.get("device") as String?,      // deviceId
-                    event.data?.get("folder") as String?,      // folderId
-                    event.data?.get("items") as? Double ?: 0.0
+                    event.data?.string("device"),              // deviceId
+                    event.data?.string("folder"),              // folderId
+                    event.data?.double("items") ?: 0.0
             )
             "Starting",
             "StartupComplete" -> logV("Ignored event ${event.type}, data ${event.data}")
@@ -246,10 +246,10 @@ class EventPoller(
     }
 
     private fun onItemFinishedEvent(event: Event) {
-        val action = event.data?.get("action") as String?
-        val error = event.data?.get("error") as String?
-        val folderId = event.data?.get("folder") as String?
-        val relativeFilePath = event.data?.get("item") as String?
+        val action = event.data?.string("action")
+        val error = event.data?.string("error")
+        val folderId = event.data?.string("folder")
+        val relativeFilePath = event.data?.string("item")
 
         // Lookup folder.path for the given folder.id if all fields were contained in the event data.
         var folderPath: String? = null
@@ -277,10 +277,10 @@ class EventPoller(
         }
     }
 
-    private fun onPendingDevicesChanged(added: Map<String, String>) {
-        val deviceId = added["deviceID"]
-        val deviceName = added["name"]
-        val deviceAddress = added["address"]
+    private fun onPendingDevicesChanged(added: JsonObject) {
+        val deviceId = added.string("deviceID")
+        val deviceName = added.string("name")
+        val deviceAddress = added.string("address")
         if (deviceId == null) {
             return
         }
@@ -289,17 +289,11 @@ class EventPoller(
         notificationHandler.showDeviceConnectNotification(deviceId, deviceName, deviceAddress)
     }
 
-    private fun onPendingFoldersChanged(added: Map<String, Any>) {
-        val deviceIdObj = added["deviceID"]
-        val folderIdObj = added["folderID"]
-        val folderLabelObj = added["folderLabel"]
-        val receiveEncrypted = added["receiveEncrypted"] as? Boolean
-        if (deviceIdObj == null || folderIdObj == null) {
-            return
-        }
-        val deviceId = deviceIdObj.toString()
-        val folderId = folderIdObj.toString()
-        val folderLabel = folderLabelObj?.toString() ?: ""
+    private fun onPendingFoldersChanged(added: JsonObject) {
+        val deviceId = added.string("deviceID") ?: return
+        val folderId = added.string("folderID") ?: return
+        val folderLabel = added.string("folderLabel") ?: ""
+        val receiveEncrypted = (added["receiveEncrypted"] as? JsonPrimitive)?.booleanOrNull
         Log.d(TAG, "Device '$deviceId' wants to share folder '$folderLabel' ($folderId)")
         // Find the deviceName corresponding to the deviceId.
         val deviceName = restApi.getDevices(false)
@@ -316,39 +310,37 @@ class EventPoller(
         )
     }
 
-    private fun onFolderCompletion(eventData: Map<String, Any>?) {
+    private fun onFolderCompletion(eventData: JsonObject?) {
         restApi.setRemoteCompletionInfo(
-                eventData?.get("device") as String?,       // deviceId
-                eventData?.get("folder") as String?,       // folderId
-                eventData?.get("needBytes") as? Double,
-                eventData?.get("completion") as? Double
+                eventData?.string("device"),               // deviceId
+                eventData?.string("folder"),               // folderId
+                eventData?.double("needBytes"),
+                eventData?.double("completion")
         )
     }
 
     private fun onFolderErrors(json: JsonElement) {
-        val data = (json as JsonObject).get("data")
+        val data = (json as? JsonObject)?.get("data") as? JsonObject
         if (data == null) {
             Log.e(TAG, "onFolderErrors: data == null")
             return
         }
-        val errors = (data as JsonObject).get("errors") as? JsonArray
+        val errors = data["errors"] as? JsonArray
         if (errors == null) {
             Log.e(TAG, "onFolderErrors: errors == null")
             return
         }
-        for (i in 0 until errors.size()) {
-            val error = errors.get(i)
-            if (error != null) {
-                val strError = (error as JsonObject).get("error").toString()
-                val strPath = (error as JsonObject).get("path").toString()
-                if (strError.isNotEmpty() &&
-                        strPath.isNotEmpty() &&
-                        strError.contains("insufficient space in basic")) {
-                    notificationHandler.showCrashedNotification(
-                            R.string.notification_out_of_disk_space,
-                            shortenedFileAndFolder(strPath)
-                    )
-                }
+        for (error in errors) {
+            val errorObject = error as? JsonObject ?: continue
+            val strError = errorObject.string("error") ?: ""
+            val strPath = errorObject.string("path") ?: ""
+            if (strError.isNotEmpty() &&
+                    strPath.isNotEmpty() &&
+                    strError.contains("insufficient space in basic")) {
+                notificationHandler.showCrashedNotification(
+                        R.string.notification_out_of_disk_space,
+                        shortenedFileAndFolder(strPath)
+                )
             }
         }
     }
@@ -362,20 +354,20 @@ class EventPoller(
     }
 
     private fun onFolderSummary(json: JsonElement, folderId: String?) {
-        val data = (json as JsonObject).get("data")
+        val data = (json as? JsonObject)?.get("data") as? JsonObject
         if (data == null) {
             Log.e(TAG, "onFolderSummary: data == null")
             return
         }
-        val summary = (data as JsonObject).get("summary")
+        val summary = data["summary"]
         if (summary == null) {
             Log.e(TAG, "onFolderSummary: summary == null")
             return
         }
         val folderStatus: FolderStatus = try {
-            GsonBuilder().create().fromJson(summary, FolderStatus::class.java)
+            jsonCodec.decodeFromString(summary.toString())
         } catch (e: Exception) {
-            Log.e(TAG, "onFolderSummary: gson.fromJson failed", e)
+            Log.e(TAG, "onFolderSummary: JSON decode failed", e)
             return
         }
         restApi.setLocalFolderStatus(folderId, folderStatus)
@@ -410,13 +402,14 @@ class EventPoller(
                 Log.i(TAG, "onItemFinished: MediaStore, Deleting file: $fullFilePath")
                 val contentUri = MediaStore.Files.getContentUri("external")
                 val resolver = context.contentResolver
-                LoggingAsyncQueryHandler(resolver).startDelete(
-                        0,                          // this will be passed to "onDeleteComplete#token"
-                        fullFilePath,               // this will be passed to "onDeleteComplete#cookie"
+                pollerScope.launch(Dispatchers.IO) {
+                    val deleted = resolver.delete(
                         contentUri,
                         MediaStore.Images.ImageColumns.DATA + " = ?",
                         arrayOf(fullFilePath)
-                )
+                    )
+                    logV("onItemFinished: MediaStore delete result=$deleted for $fullFilePath")
+                }
             }
             "update" -> {                       // file contents changed
                 Log.i(TAG, "onItemFinished: MediaScanner, Rescanning file: $fullFilePath")
@@ -430,22 +423,21 @@ class EventPoller(
     }
 
     private fun onLocalIndexUpdated(json: JsonElement, folderId: String?, dateTimeStamp: String?) {
-        val data = (json as JsonObject).get("data")
+        val data = (json as? JsonObject)?.get("data") as? JsonObject
         if (data == null) {
             Log.e(TAG, "onLocalIndexUpdated: data == null")
             return
         }
-        val filenames = (data as JsonObject).get("filenames") as? JsonArray
+        val filenames = data["filenames"] as? JsonArray
         if (filenames == null) {
             Log.e(TAG, "onLocalIndexUpdated: filenames == null")
             return
         }
-        for (i in 0 until filenames.size()) {
-            var filename = filenames.get(i).toString()
+        for (i in filenames.indices) {
+            val filename = (filenames[i] as? JsonPrimitive)?.contentOrNull.orEmpty()
             if (filename.isNotEmpty()) {
-                filename = filename.replace(Regex("^\"|\"$"), "")
                 logV("onLocalIndexUpdated: filename=[$filename], time=[$dateTimeStamp]")
-                if (i == filenames.size() - 1) {
+                if (i == filenames.size - 1) {
                     // Send the last (latest) local change to the UI.
                     restApi.setLocalFolderLastItemFinished(
                             folderId,
@@ -459,7 +451,7 @@ class EventPoller(
     }
 
     private fun onRemoteIndexUpdated(deviceId: String?, folderId: String?, items: Double) {
-        if (deviceId == null || folderId == null || items == null) {
+        if (deviceId == null || folderId == null) {
             return
         }
         // logV("onRemoteIndexUpdated: deviceId=[$deviceId], folder=[$folderId], items=$items")
@@ -474,13 +466,6 @@ class EventPoller(
     private fun onStateChanged(folderId: String?, newState: String?) {
         restApi.updateLocalFolderState(folderId, newState)
         // logV("onStateChanged: folder=[$folderId], newState=[$newState]")
-    }
-
-    private class LoggingAsyncQueryHandler(contentResolver: ContentResolver) :
-            AsyncQueryHandler(contentResolver) {
-        override fun onDeleteComplete(token: Int, cookie: Any?, result: Int) {
-            super.onUpdateComplete(token, cookie, result)
-        }
     }
 
     private fun shortenedFileAndFolder(path: String): String {
@@ -508,3 +493,9 @@ class EventPoller(
         val EVENT_UPDATE_INTERVAL: Long = TimeUnit.SECONDS.toMillis(5)
     }
 }
+
+private fun JsonObject.string(key: String): String? =
+    (this[key] as? JsonPrimitive)?.contentOrNull
+
+private fun JsonObject.double(key: String): Double? =
+    (this[key] as? JsonPrimitive)?.doubleOrNull

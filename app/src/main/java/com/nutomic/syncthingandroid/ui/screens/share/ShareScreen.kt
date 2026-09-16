@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
+import com.nutomic.syncthingandroid.service.RunConditionEvents
 import com.nutomic.syncthingandroid.ui.appPreferences
 import com.nutomic.syncthingandroid.util.ConfigRouter
 import com.nutomic.syncthingandroid.util.ConfigXml
@@ -370,15 +371,7 @@ private fun shareSelectedFiles(
         // Notify RunConditionMonitor when time schedule is enabled.
         val prefRunOnTimeSchedule = preferences.getBoolean(Constants.PREF_RUN_ON_TIME_SCHEDULE, false)
         if (prefRunOnTimeSchedule) {
-            androidx.localbroadcastmanager.content.LocalBroadcastManager
-                .getInstance(context.applicationContext)
-                .sendBroadcast(
-                    Intent(com.nutomic.syncthingandroid.service.RunConditionMonitor.ACTION_SYNC_TRIGGER_FIRED)
-                        .putExtra(
-                            com.nutomic.syncthingandroid.service.RunConditionMonitor.EXTRA_BEGIN_ACTIVE_TIME_WINDOW,
-                            true
-                        )
-                )
+            RunConditionEvents.fireSyncTrigger(beginActiveTimeWindow = true)
         }
         onDone()
     }
