@@ -39,6 +39,14 @@ import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.ui.components.AppCard
 
 /**
+ * An expanded card that has not been toggled in this composition must use its
+ * natural body height so a newly composed LazyColumn item never participates
+ * in layout at height zero.
+ */
+internal fun useNaturalBodyLayout(expanded: Boolean, seenUserToggle: Boolean): Boolean =
+    expanded && !seenUserToggle
+
+/**
  * One group section of the home lists (folders AND devices): a single card
  * framing all members of the group. Tapping the header collapses or expands
  * the body.
@@ -61,11 +69,13 @@ internal fun HomeGroupCard(
     body: @Composable ColumnScope.() -> Unit,
 ) {
     val density = LocalDensity.current
-    // Natural height of the (always composed) body, captured once.
+    // Natural height of the always-composed body, retained while the item is
+    // composed and refreshed if the body content changes.
     var fullBodyHeight by remember { mutableStateOf(0.dp) }
     // Animations only run for user toggles; the first frame(s) after a cold
     // start / config restore must snap to the stored state without animation.
     var seenUserToggle by remember { mutableStateOf(false) }
+    val useNaturalHeight = useNaturalBodyLayout(expanded, seenUserToggle)
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 0f else -90f,
         animationSpec = tween(200),
@@ -128,14 +138,13 @@ internal fun HomeGroupCard(
                 )
             }
         }
-        // The window height animates between 0 and the preloaded natural
-        // height; the body below ignores the window constraints (so it is
-        // measured exactly once) and is simply clipped while the alpha fade
-        // keeps it inside a cached hardware layer.
+        // Before the first user toggle, an expanded body must be allowed to
+        // establish its natural height. After that, the fixed clipping window
+        // preserves the low-cost height animation used for toggles.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(bodyHeight)
+                .then(if (useNaturalHeight) Modifier else Modifier.height(bodyHeight))
                 .clipToBounds()
         ) {
             Column(
