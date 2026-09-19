@@ -13,10 +13,12 @@
 
 ## 进展
 
-- P0：`androidx.window:window-core` 依赖、`rememberWindowSizeClass()` / `adaptiveWidthClass`（M3 断点）、`AdaptiveContent`（840dp 上限、TV 不限宽）、设置页接入、断点单测。
-- P1：Home 在 ≥600dp 宽度且非 TV 时使用 `NavigationRail`（手机与 TV 保持底栏），宽屏禁用 Pager 横滑；rail 接管 start/vertical insets，避免 edge-to-edge 双重内边距。
-- P2（设置页）：接入 `adaptive-navigation3` 1.3.0；设置根列表为 list pane、子页为 detail pane，宽度 ≥840dp（expanded）且非 TV 时双栏，窄屏继续走原有单栏推入与转场；宽屏下场景切换（详情栏出现/消失）用淡入淡出，详情之间的切换由 pane scaffold 内部动画处理，不触发整屏过场。
-- 待办：Home 的文件夹/设备编辑双栏（编辑器作为详情栏、FAB 随详情栏对齐）尚未做，见 P2。
+- P0：`androidx.window:window-core` 依赖、`rememberWindowSizeClass()` / `adaptiveWidthClass` / `adaptiveHeightClass`（M3 断点）、`AdaptiveContent`（默认 840dp 上限、TV 不限宽）、设置页接入、断点单测。
+- P1：Home 在 ≥600dp 宽度且非 TV 时使用 `NavigationRail`（手机与 TV 保持底栏），宽屏禁用 Pager 横滑；rail 接管 start/vertical insets。
+- P2：设置页与 Home 都是 list-detail。设置：根列表为 list pane、子页为 detail pane；Home：列表为 list pane（440dp，容纳 rail）、文件夹/设备编辑器（以及文件夹选择器、自定义同步条件）为 detail pane。宽度 ≥840dp（expanded）且非 TV 时双栏，窄屏继续单栏推入；宽屏场景切换淡入淡出，详情之间的切换由 pane scaffold 内部动画处理。Home 无详情时是单栏（rail + 限宽内容）。
+- P3：Onboarding 改用 WindowSizeClass（宽度/高度 compact）并限宽（整体 1200dp、正文 560dp）；设备 ID 对话框按宽度分栏（≥600dp，对话框上限 840dp）；文件夹选择器在宽屏变为“根目录侧栏 + 目录内容”；最近变更/日志/分享/状态页/首页内容统一 840dp 内容上限；删除 `values-sw540dp`/`sw600dp`/`xhdpi`/`xxhdpi` 死维度资源。
+- P4：`MainActivity`/`SettingsActivity` 声明 configChanges —— 旋转与窗口缩放不再重建 Activity，`EditStateStore` 草稿不再丢失；新增 Compose UI 测试基建（`ui-test-junit4` + Robolectric NATIVE 图形）并覆盖 `AdaptiveContent` 在 400dp / 1280dp 下的宽度行为。
+- 已知取舍：双栏时详情页仍显示返回箭头（与系统返回“先收起详情”的行为一致）；Home 的抽屉在列表栏内打开（只覆盖 pane）；折叠屏/铰链暂无专门处理，仅依赖窗口尺寸类。
 
 ## 1. 现状
 

@@ -65,6 +65,8 @@ compose-material3 = { module = "androidx.compose.material3:material3", version.r
 compose-material3-adaptive-navigation3 = { module = "androidx.compose.material3.adaptive:adaptive-navigation3", version.ref = "compose-material3-adaptive" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "compose-material-icons" }
 compose-ui = { module = "androidx.compose.ui:ui", version.ref = "compose-ui" }
+compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "compose-ui" }
+compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "compose-ui" }
 constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
 documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }

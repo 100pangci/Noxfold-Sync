@@ -43,11 +43,14 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.robolectric)
+    testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.junit)
     testImplementation("androidx.test:monitor:1.8.0")
+
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 android {

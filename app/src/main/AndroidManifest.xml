@@ -90,10 +90,16 @@
                 android:exported="true"
                 android:launchMode="singleInstance">
         </activity>
+        <!--
+            Handle rotation/resize in place: recreating the activity would drop the edit
+            drafts held by the per-route state stores (see EditStateStore) and restart the
+            whole Compose tree. Locale and theme changes still recreate.
+        -->
         <activity
             android:name=".activities.MainActivity"
             android:exported="false"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
             </intent-filter>
@@ -183,7 +189,7 @@
         </activity>
         <activity android:name=".activities.SettingsActivity"
             android:label="@string/settings_title"
-            android:configChanges="orientation|screenSize"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize"
             android:parentActivityName=".activities.MainActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
