@@ -17,18 +17,23 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
-fun rememberListDetailDirective(): PaneScaffoldDirective {
+fun rememberListDetailDirective(showDetail: Boolean): PaneScaffoldDirective {
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
-    return remember(adaptiveInfo) {
-        calculatePaneScaffoldDirective(adaptiveInfo).withoutPaneSpacers()
+    return remember(adaptiveInfo, showDetail) {
+        calculatePaneScaffoldDirective(adaptiveInfo).withoutPaneSpacers(
+            showDetail = showDetail,
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
-private fun PaneScaffoldDirective.withoutPaneSpacers(): PaneScaffoldDirective = PaneScaffoldDirective(
-    maxHorizontalPartitions = maxHorizontalPartitions,
+private fun PaneScaffoldDirective.withoutPaneSpacers(showDetail: Boolean): PaneScaffoldDirective = PaneScaffoldDirective(
+    // Keep the root list in the adaptive scaffold, but restrict it to a single
+    // partition until there is an actual detail. This lets its state animate to two
+    // panes instead of replacing the whole NavDisplay scene (the source of the flash).
+    maxHorizontalPartitions = if (showDetail) maxHorizontalPartitions else 1,
     horizontalPartitionSpacerSize = 0.dp,
-    maxVerticalPartitions = maxVerticalPartitions,
+    maxVerticalPartitions = if (showDetail) maxVerticalPartitions else 1,
     verticalPartitionSpacerSize = 0.dp,
     defaultPanePreferredWidth = defaultPanePreferredWidth,
     defaultPanePreferredHeight = defaultPanePreferredHeight,

@@ -30,15 +30,16 @@ import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.ListDetailPaneContent
 import com.nutomic.syncthingandroid.ui.adaptive.ListDetailPaneRole
+import com.nutomic.syncthingandroid.ui.adaptive.LocalListDetailHasDetail
 import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.rememberListDetailDirective
-import com.nutomic.syncthingandroid.ui.adaptive.rememberDetailOnlyListDetailStrategy
+import com.nutomic.syncthingandroid.ui.adaptive.rememberStableListDetailStrategy
 import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.adaptive.listDetailDetailPaneMetadata
 import com.nutomic.syncthingandroid.ui.nav.BACK_PEEK_PAD_DP
 import com.nutomic.syncthingandroid.ui.nav.backPopTransform
 import com.nutomic.syncthingandroid.ui.nav.backPredictivePopTransform
-import com.nutomic.syncthingandroid.ui.nav.sceneCrossFade
+import com.nutomic.syncthingandroid.ui.nav.listDetailSceneTransform
 import com.nutomic.syncthingandroid.util.isTelevision
 import kotlinx.serialization.Serializable
 
@@ -148,8 +149,9 @@ fun SettingsNavDisplay(
     // stack, so there is no manufactured empty pane. Televisions stay single-pane.
     val useListDetail = !LocalConfiguration.current.isTelevision &&
         rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
-    val listDetailStrategy = rememberDetailOnlyListDetailStrategy<SettingsRoute>(
-        directive = rememberListDetailDirective(),
+    val showDetail = backStack.lastOrNull() != SettingsRoute.Root
+    val listDetailStrategy = rememberStableListDetailStrategy<SettingsRoute>(
+        directive = rememberListDetailDirective(showDetail = showDetail),
     )
     // Scene changes on large screens are the detail pane appearing or disappearing;
     // cross-fading avoids sliding the whole list (and rendering it twice). Detail
@@ -160,7 +162,10 @@ fun SettingsNavDisplay(
         null
     }
 
-    CompositionLocalProvider(LocalSelectedSettingsRoot provides selectedRoot) {
+    CompositionLocalProvider(
+        LocalSelectedSettingsRoot provides selectedRoot,
+        LocalListDetailHasDetail provides showDetail,
+    ) {
         NavDisplay(
             backStack = backStack,
             onBack = { navigator.navigateBack() },
@@ -182,7 +187,7 @@ fun SettingsNavDisplay(
             },
             transitionSpec = {
                 if (useListDetail) {
-                    sceneCrossFade()
+                    listDetailSceneTransform()
                 } else {
                     // Slide in from right when navigating forward
                     slideInHorizontally(initialOffsetX = { it }) togetherWith
@@ -190,10 +195,10 @@ fun SettingsNavDisplay(
                 }
             },
             popTransitionSpec = {
-                if (useListDetail) sceneCrossFade() else backPopTransform()
+                if (useListDetail) listDetailSceneTransform() else backPopTransform()
             },
             predictivePopTransitionSpec = { swipeEdge ->
-                if (useListDetail) sceneCrossFade()
+                if (useListDetail) listDetailSceneTransform()
                 else backPredictivePopTransform(swipeEdge, peekPadPx)
             },
             modifier = Modifier.onKeyEvent { keyEvent ->

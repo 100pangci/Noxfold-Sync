@@ -210,6 +210,12 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
                         AppNavDisplay(
                             backStack = backStack,
                             onBack = { navigator.navigateBack() },
+                            isDetailRoute = { route ->
+                                route is AppRoute.FolderEdit ||
+                                    route is AppRoute.DeviceEdit ||
+                                    route is AppRoute.FolderPicker ||
+                                    route is AppRoute.SyncConditions
+                            },
                             entryProvider = {
                                 entry<AppRoute.Home>(
                                     // Wide windows show the home list and the editor side

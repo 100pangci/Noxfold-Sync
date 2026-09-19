@@ -5,40 +5,23 @@ import androidx.compose.material3.adaptive.layout.PaneScaffoldDirective
 import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.navigation3.runtime.NavEntry
-import androidx.navigation3.scene.Scene
 import androidx.navigation3.scene.SceneStrategy
-import androidx.navigation3.scene.SceneStrategyScope
 
-private const val REAL_DETAIL_METADATA =
-    "com.nutomic.syncthingandroid.adaptive.REAL_LIST_DETAIL"
-
-/** Metadata for an actual detail entry (as opposed to the library's empty placeholder). */
+/** Metadata for an actual detail entry. */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 fun listDetailDetailPaneMetadata(sceneKey: Any = Unit): Map<String, Any> =
-    ListDetailSceneStrategy.detailPane(sceneKey) + (REAL_DETAIL_METADATA to true)
+    ListDetailSceneStrategy.detailPane(sceneKey)
 
 /**
- * Material's strategy expands the detail placeholder on wide windows even when only a
- * list entry exists. This wrapper yields to Nav3's single-pane fallback unless the
- * current entry is one of our real details. It applies to previous-scene calculation as
- * well, preventing predictive Back from targeting an empty two-pane layout.
+ * Keeps the root list in the same adaptive scene that later hosts its detail. The
+ * directive constrains root-only content to one pane; when a detail appears, the pane
+ * scaffold animates its own bounds instead of NavDisplay replacing the whole scene.
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
-fun <T : Any> rememberDetailOnlyListDetailStrategy(
+fun <T : Any> rememberStableListDetailStrategy(
     directive: PaneScaffoldDirective,
-): SceneStrategy<T> {
-    val delegate = rememberListDetailSceneStrategy<T>(directive = directive)
-    return remember(delegate) { DetailOnlyListDetailStrategy(delegate) }
-}
-
-private class DetailOnlyListDetailStrategy<T : Any>(
-    private val delegate: SceneStrategy<T>,
-) : SceneStrategy<T> {
-    override fun SceneStrategyScope<T>.calculateScene(entries: List<NavEntry<T>>): Scene<T>? {
-        if (entries.lastOrNull()?.metadata?.get(REAL_DETAIL_METADATA) != true) return null
-        return with(delegate) { calculateScene(entries) }
-    }
-}
+): SceneStrategy<T> = rememberListDetailSceneStrategy(
+    shouldHandleSinglePaneLayout = true,
+    directive = directive,
+)
