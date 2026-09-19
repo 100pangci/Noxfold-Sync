@@ -59,7 +59,7 @@ import me.zhanghai.compose.preference.rememberPreferenceState
 
 
 fun EntryProviderScope<SettingsRoute>.settingsRunConditionsEntry() {
-    entry<SettingsRoute.RunConditions> {
+    settingsDetailEntry<SettingsRoute.RunConditions> {
         SettingsRunConditionsScreen()
     }
 }

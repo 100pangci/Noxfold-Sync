@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
 import com.nutomic.syncthingandroid.util.isTelevision
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,12 +108,16 @@ fun SettingsScaffold(
             }
         },
         content = { paddingValues ->
-            LazyColumn(
+            AdaptiveContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
-                content = content,
-            )
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    content = content,
+                )
+            }
         },
     )
 }

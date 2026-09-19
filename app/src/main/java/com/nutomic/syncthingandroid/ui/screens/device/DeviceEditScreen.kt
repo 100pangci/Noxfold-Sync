@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -32,9 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.activities.AdaptiveCaptureActivity
 import com.nutomic.syncthingandroid.model.Device
 import com.nutomic.syncthingandroid.model.DiscoveredDevice
 import com.nutomic.syncthingandroid.model.Folder
@@ -42,6 +45,8 @@ import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.RestApi
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveContentSideInset
 import com.nutomic.syncthingandroid.ui.appPreferences
 import com.nutomic.syncthingandroid.ui.dialogs.CompressionDialog
 import com.nutomic.syncthingandroid.ui.dialogs.ConfirmDialog
@@ -52,6 +57,7 @@ import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
 import com.nutomic.syncthingandroid.util.Compression
 import com.nutomic.syncthingandroid.util.ConfigRouter
 import com.nutomic.syncthingandroid.util.ConfigXml
+import com.nutomic.syncthingandroid.util.isTelevision
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -288,91 +294,103 @@ fun DeviceEditScreen(
     val scanPrompt = stringResource(R.string.scan_qr_code_description)
 
     Surface(color = MaterialTheme.colorScheme.surface) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(stringResource(if (isCreate) R.string.add_device else R.string.edit_device))
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            if (holder.needsUpdate) showDiscardDialog = true
-                            else navigator.navigateBack()
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(android.R.string.cancel))
-                        }
-                    },
-                    actions = {
-                        if (!isCreate) {
-                            IconButton(onClick = { showDeleteDialog = true }) {
-                                Icon(Icons.Outlined.Delete, stringResource(R.string.delete_device))
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val contentSideInset = adaptiveContentSideInset(
+                availableWidth = maxWidth,
+                isTelevision = LocalConfiguration.current.isTelevision,
+            )
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(stringResource(if (isCreate) R.string.add_device else R.string.edit_device))
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                if (holder.needsUpdate) showDiscardDialog = true
+                                else navigator.navigateBack()
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(android.R.string.cancel))
+                            }
+                        },
+                        actions = {
+                            if (!isCreate) {
+                                IconButton(onClick = { showDeleteDialog = true }) {
+                                    Icon(Icons.Outlined.Delete, stringResource(R.string.delete_device))
+                                }
                             }
                         }
-                    }
-                )
-            },
-            floatingActionButton = {
-                if (device != null) {
-                    FloatingActionButton(
-                        onClick = { save() },
-                        modifier = Modifier.imePadding()
-                    ) {
-                        Icon(
-                            Icons.Outlined.Save,
-                            stringResource(if (isCreate) R.string.create else R.string.save_title)
-                        )
+                    )
+                },
+                floatingActionButton = {
+                    if (device != null) {
+                        FloatingActionButton(
+                            onClick = { save() },
+                            modifier = Modifier
+                                .imePadding()
+                                .padding(end = contentSideInset),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Save,
+                                stringResource(if (isCreate) R.string.create else R.string.save_title)
+                            )
+                        }
                     }
                 }
-            }
-        ) { innerPadding ->
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    // Keep the viewport above the IME (see FolderEditScreen comment):
-                    // prevents system window pan + FAB imePadding double-counting.
-                    .imePadding()
-            ) {
-                val d = device
-                if (d != null) {
-                    DeviceEditContent(
-                        device = d,
-                        holder = holder,
-                        isCreate = isCreate,
-                        prefExpertMode = prefExpertMode,
-                        discoveredDevices = discoveredDevices,
-                        onDeviceMutate = { mutate ->
-                            mutate(d)
-                            holder.needsUpdate = true
-                        },
-                        onCompressionClick = { showCompressionDialog = true },
-                        onScanQr = {
-                            qrScanLauncher.launch(
-                                com.journeyapps.barcodescanner.ScanOptions()
-                                    .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
-                                    .setPrompt(scanPrompt)
-                                    .setBeepEnabled(false)
-                                    .setOrientationLocked(true)
+            ) { innerPadding ->
+                AdaptiveContent {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            // Keep the viewport above the IME (see FolderEditScreen comment):
+                            // prevents system window pan + FAB imePadding double-counting.
+                            .imePadding()
+                    ) {
+                        val d = device
+                        if (d != null) {
+                            DeviceEditContent(
+                                device = d,
+                                holder = holder,
+                                isCreate = isCreate,
+                                prefExpertMode = prefExpertMode,
+                                discoveredDevices = discoveredDevices,
+                                onDeviceMutate = { mutate ->
+                                    mutate(d)
+                                    holder.needsUpdate = true
+                                },
+                                onCompressionClick = { showCompressionDialog = true },
+                                onScanQr = {
+                                    qrScanLauncher.launch(
+                                        com.journeyapps.barcodescanner.ScanOptions()
+                                            .setCaptureActivity(AdaptiveCaptureActivity::class.java)
+                                            .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+                                            .setPrompt(scanPrompt)
+                                            .setBeepEnabled(false)
+                                            // AdaptiveCaptureActivity owns the size-aware policy.
+                                            .setOrientationLocked(false)
+                                    )
+                                },
+                                onShowQr = { showQrDialog = true },
+                                onOpenSyncConditions = {
+                                    navigator.navigateTo(
+                                        AppRoute.SyncConditions(
+                                            objectPrefixAndId = Constants.PREF_OBJECT_PREFIX_DEVICE + d.deviceID,
+                                            objectReadableName = d.displayName
+                                        )
+                                    )
+                                },
+                                onOpenFolderEdit = { navigator.openFolderEdit(null, true) },
+                                onRefreshDiscovery = { discoveryRefresh++ },
+                                onRefreshGroupOptions = refreshGroupOptions,
                             )
-                        },
-                        onShowQr = { showQrDialog = true },
-                        onOpenSyncConditions = {
-                            navigator.navigateTo(
-                                AppRoute.SyncConditions(
-                                    objectPrefixAndId = Constants.PREF_OBJECT_PREFIX_DEVICE + d.deviceID,
-                                    objectReadableName = d.displayName
-                                )
+                        } else {
+                            Text(
+                                text = stringResource(R.string.syncthing_starting),
+                                modifier = Modifier.align(Alignment.Center)
                             )
-                        },
-                        onOpenFolderEdit = { navigator.openFolderEdit(null, true) },
-                        onRefreshDiscovery = { discoveryRefresh++ },
-                        onRefreshGroupOptions = refreshGroupOptions,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.syncthing_starting),
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                        }
+                    }
                 }
             }
         }

@@ -28,7 +28,7 @@ import me.zhanghai.compose.preference.rememberPreferenceState
 private const val TAG = "SettingsUserInterfaceScreen"
 
 fun EntryProviderScope<SettingsRoute>.settingsUserInterfaceEntry() {
-    entry<SettingsRoute.UserInterface> {
+    settingsDetailEntry<SettingsRoute.UserInterface> {
         SettingsUserInterfaceScreen()
     }
 }

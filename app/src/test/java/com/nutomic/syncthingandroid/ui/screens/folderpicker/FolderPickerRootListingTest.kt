@@ -1,6 +1,7 @@
 package com.nutomic.syncthingandroid.ui.screens.folderpicker
 
 import java.io.File
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -56,5 +57,48 @@ class FolderPickerRootListingTest {
     fun listEntries_nonRoot_emptyDirectoryReturnsEmptyList() {
         val entries = listEntries(tempFolder.root, rootBrowse = false)
         assertTrue(entries.isEmpty())
+    }
+
+    @Test
+    fun findContainingRoot_selectsDeepestMatchingRoot() {
+        val roots = setOf(
+            File("/"),
+            File("/storage/emulated/0"),
+            File("/storage/emulated/0/Download"),
+        )
+
+        val result = findContainingRoot(
+            roots,
+            File("/storage/emulated/0/Download/archive"),
+        )
+
+        assertEquals(File("/storage/emulated/0/Download"), result)
+    }
+
+    @Test
+    fun findContainingRoot_doesNotMatchSiblingPrefix() {
+        val roots = setOf(File("/storage/emulated/0/Down"))
+
+        val result = findContainingRoot(roots, File("/storage/emulated/0/Download"))
+
+        assertEquals(null, result)
+    }
+
+    @Test
+    fun twoPaneDecision_usesActualPaneWidth() {
+        assertFalse(
+            useTwoPaneFolderPicker(
+                isRootView = false,
+                isTelevision = false,
+                availableWidth = 400.dp,
+            )
+        )
+        assertTrue(
+            useTwoPaneFolderPicker(
+                isRootView = false,
+                isTelevision = false,
+                availableWidth = 720.dp,
+            )
+        )
     }
 }

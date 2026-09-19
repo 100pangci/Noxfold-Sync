@@ -1,11 +1,15 @@
 package com.nutomic.syncthingandroid.ui.screens.folderpicker
 
 import android.os.Environment
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,9 +34,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
@@ -40,6 +48,7 @@ import com.nutomic.syncthingandroid.ui.components.EmptyListHint
 import com.nutomic.syncthingandroid.util.FileUtils
 import com.nutomic.syncthingandroid.util.RootAccess
 import com.nutomic.syncthingandroid.util.Util
+import com.nutomic.syncthingandroid.util.isTelevision
 import java.io.File
 import java.util.TreeSet
 import kotlinx.coroutines.Dispatchers
@@ -123,14 +132,18 @@ fun FolderPickerScreen(
     }
 
     val isRootView = location == null
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        if (isRootView) stringResource(R.string.advanced_storage_path_overview)
-                        else stringResource(R.string.current_path, location!!.absolutePath)
+                        text = if (isRootView) {
+                            stringResource(R.string.advanced_storage_path_overview)
+                        } else {
+                            stringResource(R.string.current_path, location!!.absolutePath)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
@@ -179,44 +192,59 @@ fun FolderPickerScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            if (isRootView) {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(roots.toList(), key = { it.absolutePath }) { root ->
-                        Text(
-                            text = root.absolutePath,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { location = root }
-                                .padding(horizontal = 16.dp, vertical = 14.dp)
-                        )
-                    }
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+        BoxWithConstraints(contentModifier) {
+            // Use this pane's actual constraints, not the activity window size. In
+            // list-detail mode an 840dp window leaves only ~400dp for this detail
+            // pane; treating that as expanded would squeeze the entries into 120dp.
+            val useSideBySidePanes = useTwoPaneFolderPicker(
+                isRootView = isRootView,
+                isTelevision = LocalConfiguration.current.isTelevision,
+                availableWidth = maxWidth,
+            )
+
+            if (useSideBySidePanes) {
+                val activeRoot = findContainingRoot(roots, location)
+                Row(Modifier.fillMaxSize()) {
+                    RootsList(
+                        roots = roots.toList(),
+                        selectedRoot = activeRoot,
+                        onSelect = { location = it },
+                        modifier = Modifier
+                            .width(ROOTS_PANE_WIDTH)
+                            .fillMaxHeight(),
+                    )
+                    VerticalDivider()
+                    EntriesList(
+                        entries = entries,
+                        onOpen = { entry ->
+                            if (entry.isDirectory) {
+                                location = File(entry.path)
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
                 }
-            } else if (entries.isEmpty()) {
-                EmptyListHint(stringResource(R.string.folder_picker_title))
+            } else if (isRootView) {
+                RootsList(
+                    roots = roots.toList(),
+                    onSelect = { location = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(entries, key = { it.path }) { entry ->
-                        Text(
-                            text = entry.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontStyle = if (entry.isDirectory) FontStyle.Normal else FontStyle.Italic,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    if (entry.isDirectory) {
-                                        location = File(entry.path)
-                                    }
-                                }
-                                .padding(horizontal = 16.dp, vertical = 14.dp)
-                        )
-                    }
-                }
+                EntriesList(
+                    entries = entries,
+                    onOpen = { entry ->
+                        if (entry.isDirectory) {
+                            location = File(entry.path)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }
@@ -261,6 +289,89 @@ fun FolderPickerScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * Width of the storage-roots sidebar in the two-pane picker.
+ */
+private val ROOTS_PANE_WIDTH = 280.dp
+
+/** Root pane plus a useful (rather than sliver-sized) directory pane. */
+private val TWO_PANE_MIN_WIDTH = 720.dp
+
+internal fun useTwoPaneFolderPicker(
+    isRootView: Boolean,
+    isTelevision: Boolean,
+    availableWidth: androidx.compose.ui.unit.Dp,
+): Boolean = !isRootView && !isTelevision && availableWidth >= TWO_PANE_MIN_WIDTH
+
+/** The deepest configured root containing [location], so only one root is highlighted. */
+internal fun findContainingRoot(roots: Set<File>, location: File?): File? {
+    val path = location?.absolutePath ?: return null
+    return roots
+        .filter { root ->
+            val rootPath = root.absolutePath
+            path == rootPath || path.startsWith(rootPath.trimEnd(File.separatorChar) + File.separator)
+        }
+        .maxByOrNull { it.absolutePath.length }
+}
+
+/**
+ * The storage roots, used both as the full-screen root overview and as the sidebar next
+ * to a browsed directory. [selectedRoot] is the root containing the current location.
+ */
+@Composable
+private fun RootsList(
+    roots: List<File>,
+    onSelect: (File) -> Unit,
+    modifier: Modifier = Modifier,
+    selectedRoot: File? = null,
+) {
+    LazyColumn(modifier = modifier) {
+        items(roots, key = { it.absolutePath }) { root ->
+            val selected = selectedRoot == root
+            Text(
+                text = root.absolutePath,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(root) }
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.secondaryContainer
+                        else Color.Transparent
+                    )
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            )
+        }
+    }
+}
+
+/** Directory entries of the current location, or a hint when it is empty. */
+@Composable
+private fun EntriesList(
+    entries: List<PickerEntry>,
+    onOpen: (PickerEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (entries.isEmpty()) {
+        EmptyListHint(stringResource(R.string.folder_picker_title), modifier)
+    } else {
+        LazyColumn(modifier = modifier) {
+            items(entries, key = { it.path }) { entry ->
+                Text(
+                    text = entry.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontStyle = if (entry.isDirectory) FontStyle.Normal else FontStyle.Italic,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpen(entry) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+        }
     }
 }
 

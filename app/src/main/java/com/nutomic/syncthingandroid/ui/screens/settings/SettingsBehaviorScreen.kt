@@ -25,7 +25,7 @@ import me.zhanghai.compose.preference.rememberPreferenceState
 
 
 fun EntryProviderScope<SettingsRoute>.settingsBehaviorEntry() {
-    entry<SettingsRoute.Behavior> {
+    settingsDetailEntry<SettingsRoute.Behavior> {
         SettingsBehaviorScreen()
     }
 }

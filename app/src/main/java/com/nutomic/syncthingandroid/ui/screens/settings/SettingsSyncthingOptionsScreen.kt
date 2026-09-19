@@ -56,7 +56,7 @@ import kotlin.time.Duration.Companion.seconds
 private const val TAG = "SettingsSyncthingOptionsScreen"
 
 fun EntryProviderScope<SettingsRoute>.settingsSyncthingOptionsEntry() {
-    entry<SettingsRoute.SyncthingOptions> {
+    settingsDetailEntry<SettingsRoute.SyncthingOptions> {
         SettingsSyncthingOptionsScreen()
     }
 }

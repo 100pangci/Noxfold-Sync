@@ -6,13 +6,29 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListPrefetchScope
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.items
@@ -41,19 +57,27 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -66,16 +90,24 @@ import com.nutomic.syncthingandroid.service.SafBridge
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveContentSideInset
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.appPreferences
 import com.nutomic.syncthingandroid.ui.components.EmptyListHint
+import com.nutomic.syncthingandroid.ui.nav.AppRoute
 import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
 import com.nutomic.syncthingandroid.ui.theme.AMOLED_CARD_BORDER_ALPHA
 import com.nutomic.syncthingandroid.ui.theme.LocalAmoledTheme
+import com.nutomic.syncthingandroid.util.isTelevision
 import kotlinx.coroutines.launch
 
 private const val TAB_FOLDERS = 0
 private const val TAB_DEVICES = 1
 private const val TAB_STATUS = 2
+private const val HOME_TAB_TRANSITION_MILLIS = 280
 
 private val TAB_TITLES = intArrayOf(
     R.string.folders_fragment_title,
@@ -103,6 +135,8 @@ private val TAB_ICONS = listOf(
 @Composable
 fun HomeScreen(
     onExitApp: () -> Unit,
+    selectedFolderId: String? = null,
+    selectedDeviceId: String? = null,
 ) {
     val navigator = LocalAppNavigator.current
     val service = LocalSyncthingService.current
@@ -118,7 +152,51 @@ fun HomeScreen(
 
     val drawerState = rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = TAB_FOLDERS, pageCount = { 3 })
+
+    // Tablets and desktop windows get a navigation rail; phones and TVs keep the bottom
+    // bar (TVs because of their low height and D-pad navigation).
+    val windowWidthClass = rememberWindowSizeClass().adaptiveWidthClass
+    val useNavigationRail = !LocalConfiguration.current.isTelevision &&
+        windowWidthClass != AdaptiveWidthClass.Compact
+
+    // Single source of truth for the selected destination: the rail drives it, the pager
+    // follows it (and reports swipes back). Previously the rail kept its own state while
+    // the pager kept another, so switching layouts could leave a stale selection that no
+    // longer matched the pager.
+    var selectedTab by rememberSaveable { mutableIntStateOf(TAB_FOLDERS) }
+    // Create a fresh pager for every compact session. Re-attaching the PagerState that
+    // was used before entering the rail layout left it stuck on its old page; a new
+    // state always starts on the currently selected destination.
+    val compactPagerState = if (useNavigationRail) {
+        null
+    } else {
+        rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
+    }
+    val folderListState = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch)
+    val deviceListState = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch)
+    LaunchedEffect(compactPagerState) {
+        val pager = compactPagerState ?: return@LaunchedEffect
+        // settledPage only reports where a swipe came to rest, so a programmatic
+        // animation does not momentarily drag the selection back to the old page.
+        snapshotFlow { pager.settledPage }.collect { selectedTab = it }
+    }
+
+    fun selectTab(index: Int) {
+        // Re-selecting the active destination closes its detail pane; changing
+        // destinations closes it before paging.
+        navigator.clearHomeDetail()
+        if (index == selectedTab) return
+        selectedTab = index
+        // The rail animates its own content; the pager follows the selection here.
+        compactPagerState?.let { pager ->
+            scope.launch {
+                pager.animateScrollToPage(
+                    page = index,
+                    animationSpec = tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing),
+                )
+            }
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -135,109 +213,291 @@ fun HomeScreen(
             )
         }
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (useNavigationRail) {
+                HomeNavigationRail(
+                    selectedTab = selectedTab,
+                    onSelectTab = ::selectTab,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                )
+            }
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            ) {
+                // AdaptiveContent centres the list at 840dp. Keep the screen-level
+                // Scaffold FAB on that same content edge instead of marooning it at
+                // the far right of a wide tablet window.
+                val contentSideInset = adaptiveContentSideInset(
+                    availableWidth = maxWidth,
+                    isTelevision = LocalConfiguration.current.isTelevision,
+                )
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = {
+                        TopAppBar(
+                            title = { Text(stringResource(R.string.app_name)) },
+                            navigationIcon = {
+                                // With the rail the drawer button lives in the rail header at
+                                // the top-left of the window (see HomeNavigationRail).
+                                if (!useNavigationRail) {
+                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                        Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+                                    }
+                                }
+                            },
+                            actions = {
+                                if (selectedTab == TAB_FOLDERS) {
+                                    IconButton(onClick = {
+                                        if (api != null && apiConfigLoaded) {
+                                            api.rescanAll()
+                                        }
+                                    }) {
+                                        Icon(
+                                            Icons.Outlined.Refresh,
+                                            stringResource(R.string.activity_main_bottom_navigation_rescan_all)
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { navigator.openSettings() }) {
+                                    Icon(Icons.Outlined.Settings, stringResource(R.string.settings_title))
+                                }
+                            },
+                            windowInsets = if (useNavigationRail) {
+                                // The rail already handles the start side of the system bars.
+                                WindowInsets.systemBars.only(
+                                    WindowInsetsSides.Top + WindowInsetsSides.End
+                                )
+                            } else {
+                                TopAppBarDefaults.windowInsets
+                            },
+                        )
+                    },
+                    floatingActionButton = {
+                        // Add actions live on a bottom-right FAB (same spot as the folder
+                        // editor's save button), tab-aware: each list tab adds its own kind.
+                        when (selectedTab) {
+                            TAB_FOLDERS -> {
+                                FloatingActionButton(
+                                    onClick = {
+                                        navigator.navigateToHomeDetail(AppRoute.FolderEdit(isCreate = true))
+                                    },
+                                    modifier = Modifier.padding(end = contentSideInset),
+                                ) {
+                                    Icon(Icons.Outlined.Add, stringResource(R.string.add_folder))
+                                }
+                            }
+                            TAB_DEVICES -> {
+                                FloatingActionButton(
+                                    onClick = {
+                                        navigator.navigateToHomeDetail(AppRoute.DeviceEdit(isCreate = true))
+                                    },
+                                    modifier = Modifier.padding(end = contentSideInset),
+                                ) {
+                                    Icon(Icons.Outlined.Add, stringResource(R.string.add_device))
+                                }
+                            }
+                            else -> {}
                         }
                     },
-                    actions = {
-                        if (pagerState.currentPage == TAB_FOLDERS) {
-                            IconButton(onClick = {
-                                if (api != null && apiConfigLoaded) {
-                                    api.rescanAll()
+                    bottomBar = {
+                        if (!useNavigationRail) {
+                            // Pure AMOLED: black bar, separated from the content only by a faint
+                            // hairline - no tinted surface, matching the outlined-card treatment.
+                            Column {
+                                if (isAmoled) {
+                                    HorizontalDivider(
+                                        thickness = 1.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant
+                                            .copy(alpha = AMOLED_CARD_BORDER_ALPHA)
+                                    )
                                 }
-                            }) {
-                                Icon(
-                                    Icons.Outlined.Refresh,
-                                    stringResource(R.string.activity_main_bottom_navigation_rescan_all)
+                                NavigationBar(
+                                    containerColor = if (isAmoled) Color.Black
+                                        else MaterialTheme.colorScheme.surfaceContainer
+                                ) {
+                                    TAB_TITLES.forEachIndexed { index, titleRes ->
+                                        val selected = selectedTab == index
+                                        NavigationBarItem(
+                                            selected = selected,
+                                            onClick = { selectTab(index) },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
+                                                    contentDescription = null
+                                                )
+                                            },
+                                            label = { Text(stringResource(titleRes)) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    contentWindowInsets = if (useNavigationRail) {
+                        // The rail consumes the vertical and start insets; only the
+                        // remaining sides reach the pager.
+                        WindowInsets.systemBars.only(
+                            WindowInsetsSides.End + WindowInsetsSides.Bottom
+                        )
+                    } else {
+                        ScaffoldDefaults.contentWindowInsets
+                    },
+                ) { innerPadding ->
+                    AdaptiveContent(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                    ) {
+                        if (useNavigationRail) {
+                            TabletHomeTabContent(
+                                selectedTab = selectedTab,
+                                folders = folders,
+                                devices = devices,
+                                serviceState = serviceState,
+                                selectedFolderId = selectedFolderId,
+                                selectedDeviceId = selectedDeviceId,
+                                folderListState = folderListState,
+                                deviceListState = deviceListState,
+                            )
+                        } else if (compactPagerState != null) {
+                            HorizontalPager(
+                                state = compactPagerState,
+                                modifier = Modifier.fillMaxSize(),
+                                // Keep all three pages composed. Without this, every tab
+                                // switch had to rebuild the target page's whole UI on the
+                                // main thread mid-animation, which showed up as jank. Pages
+                                // now persist (including their scroll positions) and tab
+                                // switches only move the scroll offset.
+                                beyondViewportPageCount = 2
+                            ) { page ->
+                                HomeTabPage(
+                                    tab = page,
+                                    folders = folders,
+                                    devices = devices,
+                                    serviceState = serviceState,
+                                    selectedFolderId = selectedFolderId,
+                                    selectedDeviceId = selectedDeviceId,
+                                    folderListState = folderListState,
+                                    deviceListState = deviceListState,
+                                    statusVisible = compactPagerState.currentPage == TAB_STATUS,
                                 )
                             }
                         }
-                        IconButton(onClick = { navigator.openSettings() }) {
-                            Icon(Icons.Outlined.Settings, stringResource(R.string.settings_title))
-                        }
                     }
-                )
-            },
-            floatingActionButton = {
-                // Add actions live on a bottom-right FAB (same spot as the folder
-                // editor's save button), tab-aware: each list tab adds its own kind.
-                when (pagerState.currentPage) {
-                    TAB_FOLDERS -> {
-                        FloatingActionButton(onClick = { navigator.openFolderEdit(null, true) }) {
-                            Icon(Icons.Outlined.Add, stringResource(R.string.add_folder))
-                        }
-                    }
-                    TAB_DEVICES -> {
-                        FloatingActionButton(onClick = { navigator.openDeviceEdit(null, true) }) {
-                            Icon(Icons.Outlined.Add, stringResource(R.string.add_device))
-                        }
-                    }
-                    else -> {}
-                }
-            },
-            bottomBar = {
-                // Pure AMOLED: black bar, separated from the content only by a faint
-                // hairline - no tinted surface, matching the outlined-card treatment.
-                Column {
-                    if (isAmoled) {
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                                .copy(alpha = AMOLED_CARD_BORDER_ALPHA)
-                        )
-                    }
-                    NavigationBar(
-                        containerColor = if (isAmoled) Color.Black
-                            else MaterialTheme.colorScheme.surfaceContainer
-                    ) {
-                        TAB_TITLES.forEachIndexed { index, titleRes ->
-                            val selected = pagerState.currentPage == index
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
-                                        contentDescription = null
-                                    )
-                                },
-                                label = { Text(stringResource(titleRes)) }
-                            )
-                        }
-                    }
-                }
-            },
-        ) { innerPadding ->
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                // Keep all three pages composed. Without this, every tab
-                // switch had to rebuild the target page's whole UI on the
-                // main thread mid-animation, which showed up as jank. Pages
-                // now persist (including their scroll positions) and tab
-                // switches only move the scroll offset.
-                beyondViewportPageCount = 2
-            ) { page ->
-                when (page) {
-                    TAB_FOLDERS -> FolderListPage(
-                        folders = folders,
-                    )
-                    TAB_DEVICES -> DeviceListPage(
-                        devices = devices,
-                    )
-                    else -> StatusPage(
-                        serviceState = serviceState,
-                        visible = pagerState.currentPage == TAB_STATUS
-                    )
                 }
             }
+        }
+    }
+}
+
+/** Animated, state-driven destinations for the tablet navigation rail. */
+@Composable
+private fun TabletHomeTabContent(
+    selectedTab: Int,
+    folders: List<FolderUiModel>?,
+    devices: List<DeviceUiModel>?,
+    serviceState: SyncthingService.State,
+    selectedFolderId: String?,
+    selectedDeviceId: String?,
+    folderListState: LazyListState,
+    deviceListState: LazyListState,
+) {
+    AnimatedContent(
+        targetState = selectedTab,
+        transitionSpec = {
+            val direction = if (targetState > initialState) 1 else -1
+            (
+                slideInHorizontally(
+                    animationSpec = tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing),
+                    initialOffsetX = { direction * it / 10 },
+                ) + fadeIn(tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing))
+            ) togetherWith (
+                slideOutHorizontally(
+                    animationSpec = tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing),
+                    targetOffsetX = { -direction * it / 10 },
+                ) + fadeOut(tween(HOME_TAB_TRANSITION_MILLIS / 2))
+            )
+        },
+        label = "tablet-home-tab",
+    ) { tab ->
+        HomeTabPage(
+            tab = tab,
+            folders = folders,
+            devices = devices,
+            serviceState = serviceState,
+            selectedFolderId = selectedFolderId,
+            selectedDeviceId = selectedDeviceId,
+            folderListState = folderListState,
+            deviceListState = deviceListState,
+            statusVisible = tab == TAB_STATUS,
+        )
+    }
+}
+
+@Composable
+private fun HomeTabPage(
+    tab: Int,
+    folders: List<FolderUiModel>?,
+    devices: List<DeviceUiModel>?,
+    serviceState: SyncthingService.State,
+    selectedFolderId: String?,
+    selectedDeviceId: String?,
+    folderListState: LazyListState,
+    deviceListState: LazyListState,
+    statusVisible: Boolean,
+) {
+    when (tab) {
+        TAB_FOLDERS -> FolderListPage(
+            folders = folders,
+            selectedFolderId = selectedFolderId,
+            listState = folderListState,
+        )
+        TAB_DEVICES -> DeviceListPage(
+            devices = devices,
+            selectedDeviceId = selectedDeviceId,
+            listState = deviceListState,
+        )
+        else -> StatusPage(
+            serviceState = serviceState,
+            visible = statusVisible,
+        )
+    }
+}
+
+/**
+ * Primary destinations as a Material 3 navigation rail for tablet and desktop windows.
+ * The drawer button sits in the rail header so it stays at the window's top-left corner
+ * instead of drifting right with the top bar.
+ */
+@Composable
+private fun HomeNavigationRail(
+    selectedTab: Int,
+    onSelectTab: (Int) -> Unit,
+    onOpenDrawer: () -> Unit,
+) {
+    NavigationRail(
+        modifier = Modifier.fillMaxHeight(),
+        header = {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+            }
+        },
+    ) {
+        TAB_TITLES.forEachIndexed { index, titleRes ->
+            val selected = selectedTab == index
+            NavigationRailItem(
+                selected = selected,
+                onClick = { onSelectTab(index) },
+                icon = {
+                    Icon(
+                        imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
+                        contentDescription = null
+                    )
+                },
+                label = { Text(stringResource(titleRes)) },
+            )
         }
     }
 }
@@ -246,6 +506,8 @@ fun HomeScreen(
 @Composable
 private fun FolderListPage(
     folders: List<FolderUiModel>?,
+    selectedFolderId: String?,
+    listState: LazyListState,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
@@ -323,7 +585,9 @@ private fun FolderListPage(
         } else {
             // Plain storage location: no bridge mapping exists, so there is
             // nothing to reauthorize here — open the editor for a manual fix.
-            navigator.openFolderEdit(target.id, false)
+            navigator.navigateToHomeDetail(
+                AppRoute.FolderEdit(folderId = target.id, isCreate = false)
+            )
         }
         // No manual refresh: HomeDataHost re-polls buildFolderUiModels at
         // GUI_UPDATE_INTERVAL and publishes the updated models via the
@@ -332,7 +596,11 @@ private fun FolderListPage(
     // Stable callbacks: combined with the FolderUiModel data class equality,
     // rows whose content did not change are skipped while scrolling.
     val onEdit: (FolderUiModel) -> Unit = remember(navigator) {
-        { model -> navigator.openFolderEdit(model.id, false) }
+        { model ->
+            navigator.navigateToHomeDetail(
+                AppRoute.FolderEdit(folderId = model.id, isCreate = false)
+            )
+        }
     }
     // Intercepted tap for needsSafAuthorization cards: launch the SAF picker
     // directly instead of opening the editor (the editor would only do the
@@ -367,7 +635,7 @@ private fun FolderListPage(
         }
     }
     LazyColumn(
-        state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
@@ -389,6 +657,7 @@ private fun FolderListPage(
                 section.items.forEachIndexed { index, model ->
                     FolderRowContent(
                         model = model,
+                        selected = model.id == selectedFolderId,
                         onEdit = onEdit,
                         onOverride = onOverride,
                         onRevert = onRevert,
@@ -407,6 +676,8 @@ private fun FolderListPage(
 @Composable
 private fun DeviceListPage(
     devices: List<DeviceUiModel>?,
+    selectedDeviceId: String?,
+    listState: LazyListState,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
@@ -445,10 +716,14 @@ private fun DeviceListPage(
             .apply()
     }
     val onEdit: (DeviceUiModel) -> Unit = remember(navigator) {
-        { model -> navigator.openDeviceEdit(model.id, false) }
+        { model ->
+            navigator.navigateToHomeDetail(
+                AppRoute.DeviceEdit(deviceId = model.id, isCreate = false)
+            )
+        }
     }
     LazyColumn(
-        state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
@@ -466,6 +741,7 @@ private fun DeviceListPage(
                 section.items.forEachIndexed { index, model ->
                     DeviceRowContent(
                         model = model,
+                        selected = model.id == selectedDeviceId,
                         onEdit = onEdit,
                     )
                     if (index < section.items.lastIndex) {

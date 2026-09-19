@@ -15,8 +15,10 @@ dependencies {
     implementation(libs.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.window)
     implementation(libs.android.material)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material3.adaptive.navigation3)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.ui)
     implementation(libs.constraintlayout)
@@ -41,11 +43,14 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.robolectric)
+    testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.junit)
     testImplementation("androidx.test:monitor:1.8.0")
+
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 android {
