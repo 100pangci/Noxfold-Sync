@@ -19,6 +19,13 @@ enum class AdaptiveWidthClass {
     Expanded,
 }
 
+/** Height breakpoints mirroring the Material 3 window size classes. */
+enum class AdaptiveHeightClass {
+    Compact,
+    Medium,
+    Expanded,
+}
+
 /**
  * The window size class of the current container, re-evaluated on rotation, split
  * screen, freeform window resizes and foldable posture changes.
@@ -47,4 +54,14 @@ val WindowSizeClass.adaptiveWidthClass: AdaptiveWidthClass
         isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) ->
             AdaptiveWidthClass.Medium
         else -> AdaptiveWidthClass.Compact
+    }
+
+/** Material 3 height class for this window size class. */
+val WindowSizeClass.adaptiveHeightClass: AdaptiveHeightClass
+    get() = when {
+        isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_EXPANDED_LOWER_BOUND) ->
+            AdaptiveHeightClass.Expanded
+        isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND) ->
+            AdaptiveHeightClass.Medium
+        else -> AdaptiveHeightClass.Compact
     }

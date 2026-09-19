@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.FileProvider
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
 import java.io.File
 
 /**
@@ -115,26 +116,30 @@ fun LogScreen(
             )
         }
     ) { innerPadding ->
-        if (isLoading) {
-            Text(
-                text = stringResource(R.string.retrieving_logs),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp)
-            )
-        } else {
-            SelectionContainer {
+        AdaptiveContent(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            if (isLoading) {
                 Text(
-                    text = logText,
-                    fontFamily = FontFamily.Monospace,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    text = stringResource(R.string.retrieving_logs),
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = 8.dp)
-                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
                 )
+            } else {
+                SelectionContainer {
+                    Text(
+                        text = logText,
+                        fontFamily = FontFamily.Monospace,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp)
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
             }
         }
     }

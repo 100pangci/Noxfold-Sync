@@ -50,17 +50,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveHeightClass
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveHeightClass
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.util.isTelevision
 
-private const val COMPACT_SCREEN_MAX_DP = 360
 private val focusIndicatorStrokeWidth = 3.dp
 private val focusIndicatorGap = 2.dp
 private val focusIndicatorPadding = focusIndicatorStrokeWidth + focusIndicatorGap
@@ -107,42 +110,46 @@ fun OnboardingScaffold(
     }
 
     Scaffold { paddingValues ->
-        if (config.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            PortraitScaffoldContent(
-                paddingValues = paddingValues,
-                icon = icon,
-                title = title,
-                description = description,
-                action = action,
-                pageIndex = pageIndex,
-                pageCount = pageCount,
-                canGoBack = canGoBack,
-                backVisible = backVisible,
-                nextLabel = nextLabel,
-                nextEnabled = nextEnabled,
-                nextVisible = nextVisible,
-                onBack = onBack,
-                onNext = onNext,
-                nextFocusRequester = nextFocusRequester,
-            )
-        } else {
-            LandscapeScaffoldContent(
-                paddingValues = paddingValues,
-                icon = icon,
-                title = title,
-                description = description,
-                action = action,
-                pageIndex = pageIndex,
-                pageCount = pageCount,
-                canGoBack = canGoBack,
-                backVisible = backVisible,
-                nextLabel = nextLabel,
-                nextEnabled = nextEnabled,
-                nextVisible = nextVisible,
-                onBack = onBack,
-                onNext = onNext,
-                nextFocusRequester = nextFocusRequester,
-            )
+        // Keep the content within a readable width on wide windows; televisions stay
+        // full width (see AdaptiveContent).
+        AdaptiveContent(maxWidth = 1200.dp) {
+            if (config.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                PortraitScaffoldContent(
+                    paddingValues = paddingValues,
+                    icon = icon,
+                    title = title,
+                    description = description,
+                    action = action,
+                    pageIndex = pageIndex,
+                    pageCount = pageCount,
+                    canGoBack = canGoBack,
+                    backVisible = backVisible,
+                    nextLabel = nextLabel,
+                    nextEnabled = nextEnabled,
+                    nextVisible = nextVisible,
+                    onBack = onBack,
+                    onNext = onNext,
+                    nextFocusRequester = nextFocusRequester,
+                )
+            } else {
+                LandscapeScaffoldContent(
+                    paddingValues = paddingValues,
+                    icon = icon,
+                    title = title,
+                    description = description,
+                    action = action,
+                    pageIndex = pageIndex,
+                    pageCount = pageCount,
+                    canGoBack = canGoBack,
+                    backVisible = backVisible,
+                    nextLabel = nextLabel,
+                    nextEnabled = nextEnabled,
+                    nextVisible = nextVisible,
+                    onBack = onBack,
+                    onNext = onNext,
+                    nextFocusRequester = nextFocusRequester,
+                )
+            }
         }
     }
 }
@@ -226,6 +233,7 @@ private fun PortraitScaffoldContent(
                 style = descriptionStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 560.dp),
             )
 
             if (action != null) {
@@ -347,6 +355,7 @@ private fun LandscapeScaffoldContent(
                     style = descriptionStyle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(max = 560.dp),
                 )
             }
 
@@ -640,13 +649,9 @@ private fun FocusIndicatorBox(
     }
 }
 
-// TODO: use window size class when material3.adaptive package is added
 @Composable
 private fun isCompactOnboardingScreen(): Boolean {
-    val containerSize = LocalWindowInfo.current.containerSize
-    val compactScreenMaxSize = COMPACT_SCREEN_MAX_DP.dp
-    return with(LocalDensity.current) {
-        containerSize.width.toDp() <= compactScreenMaxSize ||
-            containerSize.height.toDp() <= compactScreenMaxSize
-    }
+    val sizeClass = rememberWindowSizeClass()
+    return sizeClass.adaptiveWidthClass == AdaptiveWidthClass.Compact ||
+        sizeClass.adaptiveHeightClass == AdaptiveHeightClass.Compact
 }

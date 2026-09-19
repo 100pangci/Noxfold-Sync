@@ -39,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
@@ -51,6 +50,9 @@ import androidx.core.graphics.set
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.theme.AMOLED_CARD_BORDER_ALPHA
 import com.nutomic.syncthingandroid.ui.theme.LocalAmoledTheme
 
@@ -86,12 +88,16 @@ fun DeviceIdQrDialog(
         )
     }
 
+    val sideBySide = useSideBySideLayout()
+
     AlertDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.let { if (!isLandscape()) it.widthIn(max = 460.dp).fillMaxWidth(0.9f) else it },
+        modifier = Modifier
+            .widthIn(max = if (sideBySide) 840.dp else 460.dp)
+            .fillMaxWidth(0.9f),
         onDismissRequest = onDismiss,
         title = {
-            if (isLandscape()) {
+            if (sideBySide) {
                 Row(Modifier.fillMaxWidth()) {
                     DialogTitle(deviceName, isCurrentDevice, Modifier.weight(1f))
                     IconButton(onClick = onDismiss) {
@@ -103,14 +109,14 @@ fun DeviceIdQrDialog(
             }
         },
         text = {
-            if (isLandscape()) {
+            if (sideBySide) {
                 LandscapeDialogContent(deviceId, qrCode, onCopy, onShare)
             } else {
                 PortraitDialogContent(deviceId, qrCode, onCopy, onShare)
             }
         },
         confirmButton = {
-            if (!isLandscape()) {
+            if (!sideBySide) {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.finish))
                 }
@@ -119,11 +125,13 @@ fun DeviceIdQrDialog(
     )
 }
 
+/**
+ * Side-by-side layout from medium window width on, so the QR code and the device ID
+ * are not crammed into a narrow column on wide screens (including portrait tablets).
+ */
 @Composable
-private fun isLandscape(): Boolean {
-    val configuration = LocalConfiguration.current
-    return configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-}
+private fun useSideBySideLayout(): Boolean =
+    rememberWindowSizeClass().adaptiveWidthClass != AdaptiveWidthClass.Compact
 
 @Composable
 private fun DialogTitle(

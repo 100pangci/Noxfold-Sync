@@ -77,6 +77,7 @@ import com.nutomic.syncthingandroid.service.SafBridge
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
@@ -262,32 +263,36 @@ fun HomeScreen(
                     ScaffoldDefaults.contentWindowInsets
                 },
             ) { innerPadding ->
-                HorizontalPager(
-                    state = pagerState,
-                    // Rail navigation replaces the swipe gesture on large screens
-                    // (predictive back owns the edges there anyway).
-                    userScrollEnabled = !useNavigationRail,
+                AdaptiveContent(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    // Keep all three pages composed. Without this, every tab
-                    // switch had to rebuild the target page's whole UI on the
-                    // main thread mid-animation, which showed up as jank. Pages
-                    // now persist (including their scroll positions) and tab
-                    // switches only move the scroll offset.
-                    beyondViewportPageCount = 2
-                ) { page ->
-                    when (page) {
-                        TAB_FOLDERS -> FolderListPage(
-                            folders = folders,
-                        )
-                        TAB_DEVICES -> DeviceListPage(
-                            devices = devices,
-                        )
-                        else -> StatusPage(
-                            serviceState = serviceState,
-                            visible = pagerState.currentPage == TAB_STATUS
-                        )
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
+                        // Rail navigation replaces the swipe gesture on large screens
+                        // (predictive back owns the edges there anyway).
+                        userScrollEnabled = !useNavigationRail,
+                        modifier = Modifier.fillMaxSize(),
+                        // Keep all three pages composed. Without this, every tab
+                        // switch had to rebuild the target page's whole UI on the
+                        // main thread mid-animation, which showed up as jank. Pages
+                        // now persist (including their scroll positions) and tab
+                        // switches only move the scroll offset.
+                        beyondViewportPageCount = 2
+                    ) { page ->
+                        when (page) {
+                            TAB_FOLDERS -> FolderListPage(
+                                folders = folders,
+                            )
+                            TAB_DEVICES -> DeviceListPage(
+                                devices = devices,
+                            )
+                            else -> StatusPage(
+                                serviceState = serviceState,
+                                visible = pagerState.currentPage == TAB_STATUS
+                            )
+                        }
                     }
                 }
             }

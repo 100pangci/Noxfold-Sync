@@ -1,11 +1,14 @@
 package com.nutomic.syncthingandroid.ui.screens.folderpicker
 
 import android.os.Environment
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,17 +33,24 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.service.AppPrefs
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.components.EmptyListHint
 import com.nutomic.syncthingandroid.util.FileUtils
 import com.nutomic.syncthingandroid.util.RootAccess
 import com.nutomic.syncthingandroid.util.Util
+import com.nutomic.syncthingandroid.util.isTelevision
 import java.io.File
 import java.util.TreeSet
 import kotlinx.coroutines.Dispatchers
@@ -123,6 +134,11 @@ fun FolderPickerScreen(
     }
 
     val isRootView = location == null
+    // Browse beside the storage roots on wide, non-TV windows; compact and medium
+    // windows (and the initial root overview) keep the single-pane picker.
+    val useSideBySidePanes = !isRootView &&
+        !LocalConfiguration.current.isTelevision &&
+        rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
 
     Scaffold(
         topBar = {
@@ -179,45 +195,48 @@ fun FolderPickerScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            if (isRootView) {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(roots.toList(), key = { it.absolutePath }) { root ->
-                        Text(
-                            text = root.absolutePath,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { location = root }
-                                .padding(horizontal = 16.dp, vertical = 14.dp)
-                        )
-                    }
-                }
-            } else if (entries.isEmpty()) {
-                EmptyListHint(stringResource(R.string.folder_picker_title))
-            } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(entries, key = { it.path }) { entry ->
-                        Text(
-                            text = entry.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontStyle = if (entry.isDirectory) FontStyle.Normal else FontStyle.Italic,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    if (entry.isDirectory) {
-                                        location = File(entry.path)
-                                    }
-                                }
-                                .padding(horizontal = 16.dp, vertical = 14.dp)
-                        )
-                    }
-                }
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+        if (useSideBySidePanes) {
+            Row(contentModifier) {
+                RootsList(
+                    roots = roots.toList(),
+                    selectedRoot = location,
+                    onSelect = { location = it },
+                    modifier = Modifier
+                        .width(ROOTS_PANE_WIDTH)
+                        .fillMaxHeight(),
+                )
+                VerticalDivider()
+                EntriesList(
+                    entries = entries,
+                    onOpen = { entry ->
+                        if (entry.isDirectory) {
+                            location = File(entry.path)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                )
             }
+        } else if (isRootView) {
+            RootsList(
+                roots = roots.toList(),
+                onSelect = { location = it },
+                modifier = contentModifier,
+            )
+        } else {
+            EntriesList(
+                entries = entries,
+                onOpen = { entry ->
+                    if (entry.isDirectory) {
+                        location = File(entry.path)
+                    }
+                },
+                modifier = contentModifier,
+            )
         }
     }
 
@@ -261,6 +280,72 @@ fun FolderPickerScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * Width of the storage-roots sidebar in the two-pane picker.
+ */
+private val ROOTS_PANE_WIDTH = 280.dp
+
+/**
+ * The storage roots, used both as the full-screen root overview and as the sidebar next
+ * to a browsed directory. [selectedRoot] is the root containing the current location.
+ */
+@Composable
+private fun RootsList(
+    roots: List<File>,
+    onSelect: (File) -> Unit,
+    modifier: Modifier = Modifier,
+    selectedRoot: File? = null,
+) {
+    LazyColumn(modifier = modifier) {
+        items(roots, key = { it.absolutePath }) { root ->
+            val selected = selectedRoot != null && (
+                selectedRoot.absolutePath == root.absolutePath ||
+                    selectedRoot.absolutePath.startsWith(root.absolutePath + File.separator)
+                )
+            Text(
+                text = root.absolutePath,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(root) }
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.secondaryContainer
+                        else Color.Transparent
+                    )
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            )
+        }
+    }
+}
+
+/** Directory entries of the current location, or a hint when it is empty. */
+@Composable
+private fun EntriesList(
+    entries: List<PickerEntry>,
+    onOpen: (PickerEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (entries.isEmpty()) {
+        EmptyListHint(stringResource(R.string.folder_picker_title), modifier)
+    } else {
+        LazyColumn(modifier = modifier) {
+            items(entries, key = { it.path }) { entry ->
+                Text(
+                    text = entry.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontStyle = if (entry.isDirectory) FontStyle.Normal else FontStyle.Italic,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpen(entry) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+        }
     }
 }
 

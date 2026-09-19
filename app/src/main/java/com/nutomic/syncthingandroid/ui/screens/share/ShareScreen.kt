@@ -46,6 +46,7 @@ import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.RunConditionEvents
 import com.nutomic.syncthingandroid.ui.appPreferences
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
 import com.nutomic.syncthingandroid.util.ConfigRouter
 import com.nutomic.syncthingandroid.util.ConfigXml
 import com.nutomic.syncthingandroid.util.Util
@@ -125,38 +126,40 @@ fun ShareScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        ShareFileNameSection(files.size, nameText, onNameTextChange = { nameText = it })
-        ShareFolderSection(
-            folders = folders, selectedFolderIndex = selectedFolderIndex,
-            subDirectory = subDirectory, dropdownExpanded = dropdownExpanded,
-            onDropdownExpandedChange = { dropdownExpanded = it },
-            onFolderSelected = { index, folder ->
-                selectedFolderIndex = index
-                preferences.edit().putString(
-                    PREF_PREVIOUSLY_SELECTED_SYNCTHING_FOLDER, folder.id
-                ).apply()
-                dropdownExpanded = false
-            },
-            onPickSubDirectory = { folderPickerLauncher.launch(it) },
-        )
-        ShareActionsRow(
-            folders = folders,
-            isCopying = isCopying,
-            onShare = {
-                shareSelectedFiles(
-                    context, scope, preferences, files, nameText, folders,
-                    selectedFolderIndex, subDirectory,
-                    { isCopying = it }, { showProgress = it }, onDone,
-                )
-            },
-            onDone = onDone,
-        )
+    AdaptiveContent {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            ShareFileNameSection(files.size, nameText, onNameTextChange = { nameText = it })
+            ShareFolderSection(
+                folders = folders, selectedFolderIndex = selectedFolderIndex,
+                subDirectory = subDirectory, dropdownExpanded = dropdownExpanded,
+                onDropdownExpandedChange = { dropdownExpanded = it },
+                onFolderSelected = { index, folder ->
+                    selectedFolderIndex = index
+                    preferences.edit().putString(
+                        PREF_PREVIOUSLY_SELECTED_SYNCTHING_FOLDER, folder.id
+                    ).apply()
+                    dropdownExpanded = false
+                },
+                onPickSubDirectory = { folderPickerLauncher.launch(it) },
+            )
+            ShareActionsRow(
+                folders = folders,
+                isCopying = isCopying,
+                onShare = {
+                    shareSelectedFiles(
+                        context, scope, preferences, files, nameText, folders,
+                        selectedFolderIndex, subDirectory,
+                        { isCopying = it }, { showProgress = it }, onDone,
+                    )
+                },
+                onDone = onDone,
+            )
+        }
     }
 
     ShareProgressDialog(visible = showProgress)

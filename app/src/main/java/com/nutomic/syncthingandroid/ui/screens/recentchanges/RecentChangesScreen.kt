@@ -68,6 +68,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
 import com.nutomic.syncthingandroid.util.isTelevision
 import java.time.Instant
 import java.time.ZoneId
@@ -143,49 +144,52 @@ internal fun RecentChangesScreen(
             }
         },
     ) { paddingValues ->
-        val containerModifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)
-        val listContent: @Composable BoxScope.() -> Unit = {
-            if (changes.isEmpty()) {
-                EmptyState(Modifier.align(Alignment.Center))
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(changes) { change ->
-                        RecentChangeItem(
-                            change = change,
-                            showExactTimes = showExactTimes,
-                            onClick = { onItemClick(change) },
-                        )
+        AdaptiveContent(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+        ) {
+            val listContent: @Composable BoxScope.() -> Unit = {
+                if (changes.isEmpty()) {
+                    EmptyState(Modifier.align(Alignment.Center))
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(changes) { change ->
+                            RecentChangeItem(
+                                change = change,
+                                showExactTimes = showExactTimes,
+                                onClick = { onItemClick(change) },
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        if (configuration.isTelevision) {
-            // No pull-to-refresh on TV. The gesture is unreachable with a D-pad anyway, and the
-            // indicator's nested-scroll hook also reacts to the programmatic scrolling that focus
-            // movement causes: moving focus back up to the first row starts a "pull" that no gesture
-            // ever releases, leaving the spinner stuck on screen. The top bar's refresh action is the
-            // TV entry point.
-            Box(modifier = containerModifier, content = listContent)
-        } else {
-            // The exit-until-collapsed connection must sit BETWEEN the list and pull-to-refresh's
-            // own nested scroll connection: dispatch runs outward from the scrolling child, so the
-            // nearest connection wins the leftover drag. On the Scaffold it sat outside the
-            // pull-to-refresh connection, which consumed the downward overscroll first — the large
-            // title then never re-expanded and repeated drags got eaten (stuck pull state).
-            PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                onRefresh = onRefresh,
-                modifier = containerModifier,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    content = listContent,
-                )
+            if (configuration.isTelevision) {
+                // No pull-to-refresh on TV. The gesture is unreachable with a D-pad anyway, and the
+                // indicator's nested-scroll hook also reacts to the programmatic scrolling that focus
+                // movement causes: moving focus back up to the first row starts a "pull" that no gesture
+                // ever releases, leaving the spinner stuck on screen. The top bar's refresh action is the
+                // TV entry point.
+                Box(modifier = Modifier.fillMaxSize(), content = listContent)
+            } else {
+                // The exit-until-collapsed connection must sit BETWEEN the list and pull-to-refresh's
+                // own nested scroll connection: dispatch runs outward from the scrolling child, so the
+                // nearest connection wins the leftover drag. On the Scaffold it sat outside the
+                // pull-to-refresh connection, which consumed the downward overscroll first — the large
+                // title then never re-expanded and repeated drags got eaten (stuck pull state).
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = onRefresh,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection),
+                        content = listContent,
+                    )
+                }
             }
         }
     }
