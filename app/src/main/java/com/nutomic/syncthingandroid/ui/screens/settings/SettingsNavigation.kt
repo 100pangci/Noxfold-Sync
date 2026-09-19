@@ -7,6 +7,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.saveable.rememberSerializable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.toMutableStateList
@@ -104,6 +105,21 @@ val LocalSettingsNavigator = staticCompositionLocalOf<Navigator<SettingsRoute>> 
     error("Navigator not provided")
 }
 
+/**
+ * The root destination represented by the currently visible detail pane. It is only
+ * provided in the expanded list-detail layout; compact and TV navigation deliberately
+ * receive null so their existing root list remains visually unchanged.
+ */
+val LocalSelectedSettingsRoot = staticCompositionLocalOf<SettingsRoute?> { null }
+
+/** Maps nested settings pages back to the root row that owns them. */
+internal fun SettingsRoute?.selectedSettingsRoot(): SettingsRoute? = when (this) {
+    null, SettingsRoute.Root -> null
+    SettingsRoute.CustomCertificate -> SettingsRoute.SyncthingOptions
+    SettingsRoute.Licenses -> SettingsRoute.About
+    else -> this
+}
+
 @Composable
 fun rememberSettingsNavBackStack(startDestination: SettingsRoute): NavBackStack<SettingsRoute> {
     return rememberSerializable(
@@ -138,51 +154,59 @@ fun SettingsNavDisplay(
     // Scene changes on large screens are the detail pane appearing or disappearing;
     // cross-fading avoids sliding the whole list (and rendering it twice). Detail
     // switches themselves do not change the scene and are animated by the pane scaffold.
-    NavDisplay(
-        backStack = backStack,
-        onBack = { navigator.navigateBack() },
-        // NavDisplay automatically falls back to a single pane when the adaptive
-        // strategy cannot form a two-pane scene.
-        sceneStrategies = if (useListDetail) listOf(listDetailStrategy) else emptyList(),
-        entryProvider = entryProvider {
-            settingsRootEntry()
-            settingsRunConditionsEntry()
-            settingsUserInterfaceEntry()
-            settingsBehaviorEntry()
-            settingsSyncthingOptionsEntry()
-            settingsCustomCertificateEntry()
-            settingsImportExportEntry()
-            settingsTroubleshootingEntry()
-            settingsExperimentalEntry()
-            settingsAboutEntry()
-            licensesEntry()
-        },
-        transitionSpec = {
-            if (useListDetail) {
-                sceneCrossFade()
-            } else {
-                // Slide in from right when navigating forward
-                slideInHorizontally(initialOffsetX = { it }) togetherWith
-                        slideOutHorizontally(targetOffsetX = { -it })
+    val selectedRoot = if (useListDetail) {
+        backStack.lastOrNull().selectedSettingsRoot()
+    } else {
+        null
+    }
+
+    CompositionLocalProvider(LocalSelectedSettingsRoot provides selectedRoot) {
+        NavDisplay(
+            backStack = backStack,
+            onBack = { navigator.navigateBack() },
+            // NavDisplay automatically falls back to a single pane when the adaptive
+            // strategy cannot form a two-pane scene.
+            sceneStrategies = if (useListDetail) listOf(listDetailStrategy) else emptyList(),
+            entryProvider = entryProvider {
+                settingsRootEntry()
+                settingsRunConditionsEntry()
+                settingsUserInterfaceEntry()
+                settingsBehaviorEntry()
+                settingsSyncthingOptionsEntry()
+                settingsCustomCertificateEntry()
+                settingsImportExportEntry()
+                settingsTroubleshootingEntry()
+                settingsExperimentalEntry()
+                settingsAboutEntry()
+                licensesEntry()
+            },
+            transitionSpec = {
+                if (useListDetail) {
+                    sceneCrossFade()
+                } else {
+                    // Slide in from right when navigating forward
+                    slideInHorizontally(initialOffsetX = { it }) togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it })
+                }
+            },
+            popTransitionSpec = {
+                if (useListDetail) sceneCrossFade() else backPopTransform()
+            },
+            predictivePopTransitionSpec = { swipeEdge ->
+                if (useListDetail) sceneCrossFade()
+                else backPredictivePopTransform(swipeEdge, peekPadPx)
+            },
+            modifier = Modifier.onKeyEvent { keyEvent ->
+                if (keyEvent.key == Key.DirectionLeft
+                    && keyEvent.type == KeyEventType.KeyDown) {
+                    navigator.navigateBack()
+                    true
+                } else {
+                    false
+                }
             }
-        },
-        popTransitionSpec = {
-            if (useListDetail) sceneCrossFade() else backPopTransform()
-        },
-        predictivePopTransitionSpec = { swipeEdge ->
-            if (useListDetail) sceneCrossFade()
-            else backPredictivePopTransform(swipeEdge, peekPadPx)
-        },
-        modifier = Modifier.onKeyEvent { keyEvent ->
-            if (keyEvent.key == Key.DirectionLeft
-                && keyEvent.type == KeyEventType.KeyDown) {
-                navigator.navigateBack()
-                true
-            } else {
-                false
-            }
-        }
-    )
+        )
+    }
 }
 
 /**
