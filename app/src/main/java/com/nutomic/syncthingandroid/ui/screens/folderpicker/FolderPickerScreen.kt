@@ -3,6 +3,7 @@ package com.nutomic.syncthingandroid.ui.screens.folderpicker
 import android.os.Environment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,9 +44,6 @@ import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.SyncthingApp
 import com.nutomic.syncthingandroid.service.AppPrefs
-import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
-import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
-import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.components.EmptyListHint
 import com.nutomic.syncthingandroid.util.FileUtils
 import com.nutomic.syncthingandroid.util.RootAccess
@@ -134,19 +132,18 @@ fun FolderPickerScreen(
     }
 
     val isRootView = location == null
-    // Browse beside the storage roots on wide, non-TV windows; compact and medium
-    // windows (and the initial root overview) keep the single-pane picker.
-    val useSideBySidePanes = !isRootView &&
-        !LocalConfiguration.current.isTelevision &&
-        rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        if (isRootView) stringResource(R.string.advanced_storage_path_overview)
-                        else stringResource(R.string.current_path, location!!.absolutePath)
+                        text = if (isRootView) {
+                            stringResource(R.string.advanced_storage_path_overview)
+                        } else {
+                            stringResource(R.string.current_path, location!!.absolutePath)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
@@ -198,17 +195,47 @@ fun FolderPickerScreen(
         val contentModifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
-        if (useSideBySidePanes) {
-            Row(contentModifier) {
+        BoxWithConstraints(contentModifier) {
+            // Use this pane's actual constraints, not the activity window size. In
+            // list-detail mode an 840dp window leaves only ~400dp for this detail
+            // pane; treating that as expanded would squeeze the entries into 120dp.
+            val useSideBySidePanes = useTwoPaneFolderPicker(
+                isRootView = isRootView,
+                isTelevision = LocalConfiguration.current.isTelevision,
+                availableWidth = maxWidth,
+            )
+
+            if (useSideBySidePanes) {
+                val activeRoot = findContainingRoot(roots, location)
+                Row(Modifier.fillMaxSize()) {
+                    RootsList(
+                        roots = roots.toList(),
+                        selectedRoot = activeRoot,
+                        onSelect = { location = it },
+                        modifier = Modifier
+                            .width(ROOTS_PANE_WIDTH)
+                            .fillMaxHeight(),
+                    )
+                    VerticalDivider()
+                    EntriesList(
+                        entries = entries,
+                        onOpen = { entry ->
+                            if (entry.isDirectory) {
+                                location = File(entry.path)
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                }
+            } else if (isRootView) {
                 RootsList(
                     roots = roots.toList(),
-                    selectedRoot = location,
                     onSelect = { location = it },
-                    modifier = Modifier
-                        .width(ROOTS_PANE_WIDTH)
-                        .fillMaxHeight(),
+                    modifier = Modifier.fillMaxSize(),
                 )
-                VerticalDivider()
+            } else {
                 EntriesList(
                     entries = entries,
                     onOpen = { entry ->
@@ -216,27 +243,9 @@ fun FolderPickerScreen(
                             location = File(entry.path)
                         }
                     },
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
-        } else if (isRootView) {
-            RootsList(
-                roots = roots.toList(),
-                onSelect = { location = it },
-                modifier = contentModifier,
-            )
-        } else {
-            EntriesList(
-                entries = entries,
-                onOpen = { entry ->
-                    if (entry.isDirectory) {
-                        location = File(entry.path)
-                    }
-                },
-                modifier = contentModifier,
-            )
         }
     }
 
@@ -288,6 +297,26 @@ fun FolderPickerScreen(
  */
 private val ROOTS_PANE_WIDTH = 280.dp
 
+/** Root pane plus a useful (rather than sliver-sized) directory pane. */
+private val TWO_PANE_MIN_WIDTH = 720.dp
+
+internal fun useTwoPaneFolderPicker(
+    isRootView: Boolean,
+    isTelevision: Boolean,
+    availableWidth: androidx.compose.ui.unit.Dp,
+): Boolean = !isRootView && !isTelevision && availableWidth >= TWO_PANE_MIN_WIDTH
+
+/** The deepest configured root containing [location], so only one root is highlighted. */
+internal fun findContainingRoot(roots: Set<File>, location: File?): File? {
+    val path = location?.absolutePath ?: return null
+    return roots
+        .filter { root ->
+            val rootPath = root.absolutePath
+            path == rootPath || path.startsWith(rootPath.trimEnd(File.separatorChar) + File.separator)
+        }
+        .maxByOrNull { it.absolutePath.length }
+}
+
 /**
  * The storage roots, used both as the full-screen root overview and as the sidebar next
  * to a browsed directory. [selectedRoot] is the root containing the current location.
@@ -301,10 +330,7 @@ private fun RootsList(
 ) {
     LazyColumn(modifier = modifier) {
         items(roots, key = { it.absolutePath }) { root ->
-            val selected = selectedRoot != null && (
-                selectedRoot.absolutePath == root.absolutePath ||
-                    selectedRoot.absolutePath.startsWith(root.absolutePath + File.separator)
-                )
+            val selected = selectedRoot == root
             Text(
                 text = root.absolutePath,
                 style = MaterialTheme.typography.bodyLarge,

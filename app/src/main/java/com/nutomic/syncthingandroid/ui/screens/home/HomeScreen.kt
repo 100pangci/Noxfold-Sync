@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -78,11 +79,13 @@ import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveContentSideInset
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.appPreferences
 import com.nutomic.syncthingandroid.ui.components.EmptyListHint
+import com.nutomic.syncthingandroid.ui.nav.AppRoute
 import com.nutomic.syncthingandroid.ui.nav.LocalAppNavigator
 import com.nutomic.syncthingandroid.ui.theme.AMOLED_CARD_BORDER_ALPHA
 import com.nutomic.syncthingandroid.ui.theme.LocalAmoledTheme
@@ -119,6 +122,8 @@ private val TAB_ICONS = listOf(
 @Composable
 fun HomeScreen(
     onExitApp: () -> Unit,
+    selectedFolderId: String? = null,
+    selectedDeviceId: String? = null,
 ) {
     val navigator = LocalAppNavigator.current
     val service = LocalSyncthingService.current
@@ -162,141 +167,177 @@ fun HomeScreen(
                 HomeNavigationRail(
                     selectedTab = pagerState.currentPage,
                     onSelectTab = { index ->
-                        scope.launch { pagerState.animateScrollToPage(index) }
+                        // Re-selecting the active top-level destination closes its
+                        // detail pane; changing destinations closes it before paging.
+                        navigator.clearHomeDetail()
+                        if (index != pagerState.currentPage) {
+                            scope.launch { pagerState.animateScrollToPage(index) }
+                        }
                     },
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                 )
             }
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.app_name)) },
-                        navigationIcon = {
-                            // With the rail the drawer button lives in the rail header at
-                            // the top-left of the window (see HomeNavigationRail).
-                            if (!useNavigationRail) {
-                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                    Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            ) {
+                // AdaptiveContent centres the list at 840dp. Keep the screen-level
+                // Scaffold FAB on that same content edge instead of marooning it at
+                // the far right of a wide tablet window.
+                val contentSideInset = adaptiveContentSideInset(
+                    availableWidth = maxWidth,
+                    isTelevision = LocalConfiguration.current.isTelevision,
+                )
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = {
+                        TopAppBar(
+                            title = { Text(stringResource(R.string.app_name)) },
+                            navigationIcon = {
+                                // With the rail the drawer button lives in the rail header at
+                                // the top-left of the window (see HomeNavigationRail).
+                                if (!useNavigationRail) {
+                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                        Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+                                    }
+                                }
+                            },
+                            actions = {
+                                if (pagerState.currentPage == TAB_FOLDERS) {
+                                    IconButton(onClick = {
+                                        if (api != null && apiConfigLoaded) {
+                                            api.rescanAll()
+                                        }
+                                    }) {
+                                        Icon(
+                                            Icons.Outlined.Refresh,
+                                            stringResource(R.string.activity_main_bottom_navigation_rescan_all)
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { navigator.openSettings() }) {
+                                    Icon(Icons.Outlined.Settings, stringResource(R.string.settings_title))
+                                }
+                            },
+                            windowInsets = if (useNavigationRail) {
+                                // The rail already handles the start side of the system bars.
+                                WindowInsets.systemBars.only(
+                                    WindowInsetsSides.Top + WindowInsetsSides.End
+                                )
+                            } else {
+                                TopAppBarDefaults.windowInsets
+                            },
+                        )
+                    },
+                    floatingActionButton = {
+                        // Add actions live on a bottom-right FAB (same spot as the folder
+                        // editor's save button), tab-aware: each list tab adds its own kind.
+                        when (pagerState.currentPage) {
+                            TAB_FOLDERS -> {
+                                FloatingActionButton(
+                                    onClick = {
+                                        navigator.navigateToHomeDetail(AppRoute.FolderEdit(isCreate = true))
+                                    },
+                                    modifier = Modifier.padding(end = contentSideInset),
+                                ) {
+                                    Icon(Icons.Outlined.Add, stringResource(R.string.add_folder))
                                 }
                             }
-                        },
-                        actions = {
-                            if (pagerState.currentPage == TAB_FOLDERS) {
-                                IconButton(onClick = {
-                                    if (api != null && apiConfigLoaded) {
-                                        api.rescanAll()
-                                    }
-                                }) {
-                                    Icon(
-                                        Icons.Outlined.Refresh,
-                                        stringResource(R.string.activity_main_bottom_navigation_rescan_all)
+                            TAB_DEVICES -> {
+                                FloatingActionButton(
+                                    onClick = {
+                                        navigator.navigateToHomeDetail(AppRoute.DeviceEdit(isCreate = true))
+                                    },
+                                    modifier = Modifier.padding(end = contentSideInset),
+                                ) {
+                                    Icon(Icons.Outlined.Add, stringResource(R.string.add_device))
+                                }
+                            }
+                            else -> {}
+                        }
+                    },
+                    bottomBar = {
+                        if (!useNavigationRail) {
+                            // Pure AMOLED: black bar, separated from the content only by a faint
+                            // hairline - no tinted surface, matching the outlined-card treatment.
+                            Column {
+                                if (isAmoled) {
+                                    HorizontalDivider(
+                                        thickness = 1.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant
+                                            .copy(alpha = AMOLED_CARD_BORDER_ALPHA)
                                     )
                                 }
-                            }
-                            IconButton(onClick = { navigator.openSettings() }) {
-                                Icon(Icons.Outlined.Settings, stringResource(R.string.settings_title))
-                            }
-                        },
-                        windowInsets = if (useNavigationRail) {
-                            // The rail already handles the start side of the system bars.
-                            WindowInsets.systemBars.only(
-                                WindowInsetsSides.Top + WindowInsetsSides.End
-                            )
-                        } else {
-                            TopAppBarDefaults.windowInsets
-                        },
-                    )
-                },
-                floatingActionButton = {
-                    // Add actions live on a bottom-right FAB (same spot as the folder
-                    // editor's save button), tab-aware: each list tab adds its own kind.
-                    when (pagerState.currentPage) {
-                        TAB_FOLDERS -> {
-                            FloatingActionButton(onClick = { navigator.openFolderEdit(null, true) }) {
-                                Icon(Icons.Outlined.Add, stringResource(R.string.add_folder))
-                            }
-                        }
-                        TAB_DEVICES -> {
-                            FloatingActionButton(onClick = { navigator.openDeviceEdit(null, true) }) {
-                                Icon(Icons.Outlined.Add, stringResource(R.string.add_device))
+                                NavigationBar(
+                                    containerColor = if (isAmoled) Color.Black
+                                        else MaterialTheme.colorScheme.surfaceContainer
+                                ) {
+                                    TAB_TITLES.forEachIndexed { index, titleRes ->
+                                        val selected = pagerState.currentPage == index
+                                        NavigationBarItem(
+                                            selected = selected,
+                                            onClick = {
+                                                if (!selected) {
+                                                    navigator.clearHomeDetail()
+                                                    scope.launch { pagerState.animateScrollToPage(index) }
+                                                }
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
+                                                    contentDescription = null
+                                                )
+                                            },
+                                            label = { Text(stringResource(titleRes)) }
+                                        )
+                                    }
+                                }
                             }
                         }
-                        else -> {}
-                    }
-                },
-                bottomBar = {
-                    if (!useNavigationRail) {
-                        // Pure AMOLED: black bar, separated from the content only by a faint
-                        // hairline - no tinted surface, matching the outlined-card treatment.
-                        Column {
-                            if (isAmoled) {
-                                HorizontalDivider(
-                                    thickness = 1.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant
-                                        .copy(alpha = AMOLED_CARD_BORDER_ALPHA)
+                    },
+                    contentWindowInsets = if (useNavigationRail) {
+                        // The rail consumes the vertical and start insets; only the
+                        // remaining sides reach the pager.
+                        WindowInsets.systemBars.only(
+                            WindowInsetsSides.End + WindowInsetsSides.Bottom
+                        )
+                    } else {
+                        ScaffoldDefaults.contentWindowInsets
+                    },
+                ) { innerPadding ->
+                    AdaptiveContent(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                    ) {
+                        HorizontalPager(
+                            state = pagerState,
+                            // Rail navigation replaces the swipe gesture on large screens
+                            // (predictive back owns the edges there anyway).
+                            userScrollEnabled = !useNavigationRail,
+                            modifier = Modifier.fillMaxSize(),
+                            // Keep all three pages composed. Without this, every tab
+                            // switch had to rebuild the target page's whole UI on the
+                            // main thread mid-animation, which showed up as jank. Pages
+                            // now persist (including their scroll positions) and tab
+                            // switches only move the scroll offset.
+                            beyondViewportPageCount = 2
+                        ) { page ->
+                            when (page) {
+                                TAB_FOLDERS -> FolderListPage(
+                                    folders = folders,
+                                    selectedFolderId = selectedFolderId,
+                                )
+                                TAB_DEVICES -> DeviceListPage(
+                                    devices = devices,
+                                    selectedDeviceId = selectedDeviceId,
+                                )
+                                else -> StatusPage(
+                                    serviceState = serviceState,
+                                    visible = pagerState.currentPage == TAB_STATUS
                                 )
                             }
-                            NavigationBar(
-                                containerColor = if (isAmoled) Color.Black
-                                    else MaterialTheme.colorScheme.surfaceContainer
-                            ) {
-                                TAB_TITLES.forEachIndexed { index, titleRes ->
-                                    val selected = pagerState.currentPage == index
-                                    NavigationBarItem(
-                                        selected = selected,
-                                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                                        icon = {
-                                            Icon(
-                                                imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
-                                                contentDescription = null
-                                            )
-                                        },
-                                        label = { Text(stringResource(titleRes)) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                },
-                contentWindowInsets = if (useNavigationRail) {
-                    // The rail consumes the vertical and start insets; only the
-                    // remaining sides reach the pager.
-                    WindowInsets.systemBars.only(
-                        WindowInsetsSides.End + WindowInsetsSides.Bottom
-                    )
-                } else {
-                    ScaffoldDefaults.contentWindowInsets
-                },
-            ) { innerPadding ->
-                AdaptiveContent(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                ) {
-                    HorizontalPager(
-                        state = pagerState,
-                        // Rail navigation replaces the swipe gesture on large screens
-                        // (predictive back owns the edges there anyway).
-                        userScrollEnabled = !useNavigationRail,
-                        modifier = Modifier.fillMaxSize(),
-                        // Keep all three pages composed. Without this, every tab
-                        // switch had to rebuild the target page's whole UI on the
-                        // main thread mid-animation, which showed up as jank. Pages
-                        // now persist (including their scroll positions) and tab
-                        // switches only move the scroll offset.
-                        beyondViewportPageCount = 2
-                    ) { page ->
-                        when (page) {
-                            TAB_FOLDERS -> FolderListPage(
-                                folders = folders,
-                            )
-                            TAB_DEVICES -> DeviceListPage(
-                                devices = devices,
-                            )
-                            else -> StatusPage(
-                                serviceState = serviceState,
-                                visible = pagerState.currentPage == TAB_STATUS
-                            )
                         }
                     }
                 }
@@ -345,6 +386,7 @@ private fun HomeNavigationRail(
 @Composable
 private fun FolderListPage(
     folders: List<FolderUiModel>?,
+    selectedFolderId: String?,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
@@ -422,7 +464,9 @@ private fun FolderListPage(
         } else {
             // Plain storage location: no bridge mapping exists, so there is
             // nothing to reauthorize here — open the editor for a manual fix.
-            navigator.openFolderEdit(target.id, false)
+            navigator.navigateToHomeDetail(
+                AppRoute.FolderEdit(folderId = target.id, isCreate = false)
+            )
         }
         // No manual refresh: HomeDataHost re-polls buildFolderUiModels at
         // GUI_UPDATE_INTERVAL and publishes the updated models via the
@@ -431,7 +475,11 @@ private fun FolderListPage(
     // Stable callbacks: combined with the FolderUiModel data class equality,
     // rows whose content did not change are skipped while scrolling.
     val onEdit: (FolderUiModel) -> Unit = remember(navigator) {
-        { model -> navigator.openFolderEdit(model.id, false) }
+        { model ->
+            navigator.navigateToHomeDetail(
+                AppRoute.FolderEdit(folderId = model.id, isCreate = false)
+            )
+        }
     }
     // Intercepted tap for needsSafAuthorization cards: launch the SAF picker
     // directly instead of opening the editor (the editor would only do the
@@ -488,6 +536,7 @@ private fun FolderListPage(
                 section.items.forEachIndexed { index, model ->
                     FolderRowContent(
                         model = model,
+                        selected = model.id == selectedFolderId,
                         onEdit = onEdit,
                         onOverride = onOverride,
                         onRevert = onRevert,
@@ -506,6 +555,7 @@ private fun FolderListPage(
 @Composable
 private fun DeviceListPage(
     devices: List<DeviceUiModel>?,
+    selectedDeviceId: String?,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
@@ -544,7 +594,11 @@ private fun DeviceListPage(
             .apply()
     }
     val onEdit: (DeviceUiModel) -> Unit = remember(navigator) {
-        { model -> navigator.openDeviceEdit(model.id, false) }
+        { model ->
+            navigator.navigateToHomeDetail(
+                AppRoute.DeviceEdit(deviceId = model.id, isCreate = false)
+            )
+        }
     }
     LazyColumn(
         state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
@@ -565,6 +619,7 @@ private fun DeviceListPage(
                 section.items.forEachIndexed { index, model ->
                     DeviceRowContent(
                         model = model,
+                        selected = model.id == selectedDeviceId,
                         onEdit = onEdit,
                     )
                     if (index < section.items.lastIndex) {

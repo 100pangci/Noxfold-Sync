@@ -6,8 +6,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
-import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
-import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.saveable.rememberSerializable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -24,16 +22,18 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.serialization.NavBackStackSerializer
 import androidx.navigation3.runtime.serialization.NavKeySerializer
-import androidx.navigation3.scene.SceneStrategy
-import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.ListDetailPaneContent
+import com.nutomic.syncthingandroid.ui.adaptive.ListDetailPaneRole
 import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.rememberListDetailDirective
+import com.nutomic.syncthingandroid.ui.adaptive.rememberDetailOnlyListDetailStrategy
 import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
+import com.nutomic.syncthingandroid.ui.adaptive.listDetailDetailPaneMetadata
 import com.nutomic.syncthingandroid.ui.nav.BACK_PEEK_PAD_DP
 import com.nutomic.syncthingandroid.ui.nav.backPopTransform
 import com.nutomic.syncthingandroid.ui.nav.backPredictivePopTransform
@@ -95,6 +95,7 @@ sealed interface SettingsRoute : NavKey {
 
 interface Navigator<T: NavKey> {
     fun navigateTo(route: T)
+    fun navigateToRootDetail(route: T) = navigateTo(route)
     fun navigateBack()
     fun navigateUp()
 }
@@ -127,28 +128,22 @@ fun SettingsNavDisplay(
 
     // On large windows the root list and the current sub-screen become a list-detail
     // pair; compact and medium windows keep the single-pane push navigation (and its
-    // transitions), because ListDetailSceneStrategy yields to the chained
-    // SinglePaneSceneStrategy whenever only one pane fits (its directive switches to two
-    // panes at the expanded width breakpoint, 840dp). Televisions stay single-pane too.
+    // transitions). The detail-only adaptive strategy also yields for a root-only
+    // stack, so there is no manufactured empty pane. Televisions stay single-pane.
     val useListDetail = !LocalConfiguration.current.isTelevision &&
         rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
-    val listDetailStrategy = rememberListDetailSceneStrategy<SettingsRoute>(
+    val listDetailStrategy = rememberDetailOnlyListDetailStrategy<SettingsRoute>(
         directive = rememberListDetailDirective(),
     )
-    val sceneStrategy: SceneStrategy<SettingsRoute> =
-        if (useListDetail) {
-            listDetailStrategy then SinglePaneSceneStrategy()
-        } else {
-            SinglePaneSceneStrategy()
-        }
-
     // Scene changes on large screens are the detail pane appearing or disappearing;
     // cross-fading avoids sliding the whole list (and rendering it twice). Detail
     // switches themselves do not change the scene and are animated by the pane scaffold.
     NavDisplay(
         backStack = backStack,
         onBack = { navigator.navigateBack() },
-        sceneStrategies = listOf(sceneStrategy),
+        // NavDisplay automatically falls back to a single pane when the adaptive
+        // strategy cannot form a two-pane scene.
+        sceneStrategies = if (useListDetail) listOf(listDetailStrategy) else emptyList(),
         entryProvider = entryProvider {
             settingsRootEntry()
             settingsRunConditionsEntry()
@@ -198,5 +193,9 @@ fun SettingsNavDisplay(
 internal inline fun <reified T : SettingsRoute> EntryProviderScope<SettingsRoute>.settingsDetailEntry(
     noinline content: @Composable (T) -> Unit,
 ) {
-    entry<T>(metadata = ListDetailSceneStrategy.detailPane(), content = content)
+    entry<T>(metadata = listDetailDetailPaneMetadata()) { route ->
+        ListDetailPaneContent(ListDetailPaneRole.Detail) {
+            content(route)
+        }
+    }
 }

@@ -1,5 +1,6 @@
 package com.nutomic.syncthingandroid.ui.screens.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -62,6 +64,7 @@ import com.nutomic.syncthingandroid.util.Util
 @Composable
 internal fun FolderRowContent(
     model: FolderUiModel,
+    selected: Boolean = false,
     onEdit: (FolderUiModel) -> Unit,
     onOverride: (FolderUiModel) -> Unit,
     onRevert: (FolderUiModel) -> Unit,
@@ -75,6 +78,10 @@ internal fun FolderRowContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                else Color.Transparent
+            )
             .clickable { if (model.needsSafAuthorization) onReauthorize(model) else onEdit(model) }
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {

@@ -229,11 +229,15 @@
         <property
             android:name="android.content.MEDIA_CAPABILITIES"
             android:resource="@xml/media_capabilities" />
-        <!-- zxing declares its CaptureActivity as sensorLandscape in the library
-             manifest; override it to portrait for a natural scanning UX. -->
+        <!-- Compact phones scan portrait-first; large screens stay resizable. -->
+        <activity
+            android:name=".activities.AdaptiveCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified"
+            android:theme="@style/zxing_CaptureTheme" />
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
-            android:screenOrientation="portrait"
+            android:screenOrientation="unspecified"
             tools:replace="android:screenOrientation" />
         <provider
              android:name="androidx.core.content.FileProvider"

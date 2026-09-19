@@ -27,6 +27,9 @@ class EditStateStore<T>(private val factory: () -> T) {
 
     fun stateFor(key: String): T = states.getOrPut(key, factory)
 
+    /** Returns an existing route state without creating a new draft. */
+    fun stateOrNull(key: String): T? = states[key]
+
     /** Evicts every state object whose route is no longer on the back stack. */
     fun retainAll(keys: Set<String>) {
         states.keys.retainAll(keys)

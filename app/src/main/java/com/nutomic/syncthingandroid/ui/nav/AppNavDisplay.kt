@@ -14,7 +14,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
-import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -25,13 +24,12 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.scene.Scene
-import androidx.navigation3.scene.SceneStrategy
-import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigationevent.NavigationEvent
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.rememberListDetailDirective
+import com.nutomic.syncthingandroid.ui.adaptive.rememberDetailOnlyListDetailStrategy
 import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.util.isTelevision
 
@@ -116,22 +114,19 @@ fun <T : NavKey> AppNavDisplay(
 ) {
     val peekPadPx = with(LocalDensity.current) { BACK_PEEK_PAD_DP.dp.roundToPx() }
 
+    // DetailOnlyListDetailStrategy itself rejects list-only stacks (including the
+    // previous stack during predictive Back), avoiding an empty right pane.
     val useListDetail = !LocalConfiguration.current.isTelevision &&
         rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
-    val listDetailStrategy = rememberListDetailSceneStrategy<T>(
+    val listDetailStrategy = rememberDetailOnlyListDetailStrategy<T>(
         directive = rememberListDetailDirective(),
     )
-    val sceneStrategy: SceneStrategy<T> =
-        if (useListDetail) {
-            listDetailStrategy then SinglePaneSceneStrategy()
-        } else {
-            SinglePaneSceneStrategy()
-        }
-
     NavDisplay(
         backStack = backStack,
         onBack = onBack,
-        sceneStrategies = listOf(sceneStrategy),
+        // NavDisplay supplies SinglePaneSceneStrategy as the fallback whenever
+        // none of the provided adaptive strategies can form a scene.
+        sceneStrategies = if (useListDetail) listOf(listDetailStrategy) else emptyList(),
         entryProvider = entryProvider(builder = entryProvider),
         transitionSpec = {
             if (useListDetail) {

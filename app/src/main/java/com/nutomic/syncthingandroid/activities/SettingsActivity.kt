@@ -32,6 +32,7 @@ import com.nutomic.syncthingandroid.ui.screens.settings.LocalSettingsNavigator
 import com.nutomic.syncthingandroid.ui.screens.settings.Navigator
 import com.nutomic.syncthingandroid.ui.screens.settings.createPreferenceFlow
 import com.nutomic.syncthingandroid.ui.screens.settings.rememberSettingsNavBackStack
+import com.nutomic.syncthingandroid.ui.nav.replaceAfterLast
 
 class SettingsActivity : SyncthingActivity() {
 
@@ -70,6 +71,12 @@ class SettingsActivity : SyncthingActivity() {
                         // Ignore taps that would push the destination that is already open.
                         if (backStack.lastOrNull() == route) return
                         backStack.add(route)
+                    }
+                    override fun navigateToRootDetail(route: SettingsRoute) {
+                        backStack.replaceAfterLast(
+                            isAnchor = { it == SettingsRoute.Root },
+                            route = route,
+                        )
                     }
                     override fun navigateBack() {
                         if (backStack.size > 1) {

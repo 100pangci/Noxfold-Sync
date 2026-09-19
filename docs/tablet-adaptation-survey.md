@@ -19,6 +19,7 @@
 - P3：Onboarding 改用 WindowSizeClass（宽度/高度 compact）并限宽（整体 1200dp、正文 560dp）；设备 ID 对话框按宽度分栏（≥600dp，对话框上限 840dp）；文件夹选择器在宽屏变为“根目录侧栏 + 目录内容”；最近变更/日志/分享/状态页/首页内容统一 840dp 内容上限；删除 `values-sw540dp`/`sw600dp`/`xhdpi`/`xxhdpi` 死维度资源。
 - P4：`MainActivity`/`SettingsActivity` 声明 configChanges —— 旋转与窗口缩放不再重建 Activity，`EditStateStore` 草稿不再丢失；新增 Compose UI 测试基建（`ui-test-junit4` + Robolectric NATIVE 图形）并覆盖 `AdaptiveContent` 在 400dp / 1280dp 下的宽度行为。
 - 修复：去掉 ListDetailPaneScaffold 默认的 24dp 双栏间隔（`rememberListDetailDirective()`）；导航器忽略“目标已在栈顶”的重复点击（双击条目、双栏下重复点同一项）；Home 的抽屉按钮移到 rail 头部，保持在窗口左上角；`SettingsActivity`/`RecentChangesActivity`/`WebGuiActivity` 加 `singleTop` 防止重复实例。
+- 二次审查修复：列表选择改为替换详情分支（Back 不再遍历历史选择），当前项高亮；切换条目/Tab 会保护未保存草稿；无详情时不创建空白右 pane；pane 内侧不重复应用系统栏 inset；文件夹选择器按自身 pane 实际宽度而非整窗宽度分栏；宽屏表单及 FAB 对齐 840dp 内容区；扫码仅紧凑手机锁竖屏。
 - 已知取舍：双栏时详情页仍显示返回箭头（与系统返回“先收起详情”的行为一致）；Home 的抽屉在列表栏内打开（只覆盖 pane）；折叠屏/铰链暂无专门处理，仅依赖窗口尺寸类。
 
 ## 1. 现状

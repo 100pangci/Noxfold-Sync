@@ -45,7 +45,6 @@ import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
 import com.nutomic.syncthingandroid.ui.appPreferences
-import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
 import com.nutomic.syncthingandroid.ui.components.AppCard
 import com.nutomic.syncthingandroid.util.Util
 import android.util.Log

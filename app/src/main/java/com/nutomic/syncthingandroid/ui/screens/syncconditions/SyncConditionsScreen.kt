@@ -1,6 +1,7 @@
 package com.nutomic.syncthingandroid.ui.screens.syncconditions
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.R
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.ui.components.ClickRow
 import com.nutomic.syncthingandroid.ui.components.ToggleRow
@@ -129,94 +131,99 @@ fun SyncConditionsScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
+        AdaptiveContent(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
-            Text(
-                text = objectReadableName,
-                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(16.dp)
-            )
-            ToggleRow(
-                title = stringResource(R.string.run_on_wifi_title),
-                checked = syncOnWifi,
-                enabled = globalRunOnWifiEnabled,
-                onCheckedChange = { checked ->
-                    syncOnWifi = checked
-                    if (!checked) syncOnWhitelistedWifi = false
-                }
-            )
-            ToggleRow(
-                title = stringResource(R.string.run_on_whitelisted_wifi_title),
-                checked = syncOnWhitelistedWifi,
-                enabled = globalWhitelistEnabled && syncOnWifi,
-                onCheckedChange = { checked -> syncOnWhitelistedWifi = checked }
-            )
-            if (globalWhitelistEnabled) {
-                if (wifiSsidList.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.custom_wifi_ssid_whitelist_empty),
-                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                } else {
-                    wifiSsidList.forEach { wifiSsid ->
-                        val label = wifiSsid.replaceFirst("^\"".toRegex(), "").replaceFirst("\"$".toRegex(), "")
-                        ToggleRow(
-                            title = label,
-                            checked = selectedSsids.contains(wifiSsid),
-                            enabled = ssidSwitchesEnabled,
-                            onCheckedChange = { checked ->
-                                selectedSsids = selectedSsids.toMutableSet().apply {
-                                    if (checked) add(wifiSsid) else remove(wifiSsid)
-                                }
-                            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = objectReadableName,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(16.dp)
+                )
+                ToggleRow(
+                    title = stringResource(R.string.run_on_wifi_title),
+                    checked = syncOnWifi,
+                    enabled = globalRunOnWifiEnabled,
+                    onCheckedChange = { checked ->
+                        syncOnWifi = checked
+                        if (!checked) syncOnWhitelistedWifi = false
+                    }
+                )
+                ToggleRow(
+                    title = stringResource(R.string.run_on_whitelisted_wifi_title),
+                    checked = syncOnWhitelistedWifi,
+                    enabled = globalWhitelistEnabled && syncOnWifi,
+                    onCheckedChange = { checked -> syncOnWhitelistedWifi = checked }
+                )
+                if (globalWhitelistEnabled) {
+                    if (wifiSsidList.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.custom_wifi_ssid_whitelist_empty),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
+                    } else {
+                        wifiSsidList.forEach { wifiSsid ->
+                            val label = wifiSsid.replaceFirst("^\"".toRegex(), "").replaceFirst("\"$".toRegex(), "")
+                            ToggleRow(
+                                title = label,
+                                checked = selectedSsids.contains(wifiSsid),
+                                enabled = ssidSwitchesEnabled,
+                                onCheckedChange = { checked ->
+                                    selectedSsids = selectedSsids.toMutableSet().apply {
+                                        if (checked) add(wifiSsid) else remove(wifiSsid)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            ToggleRow(
-                title = stringResource(R.string.run_on_metered_wifi_title),
-                checked = syncOnMeteredWifi,
-                enabled = globalRunOnMeteredWifiEnabled,
-                onCheckedChange = { checked -> syncOnMeteredWifi = checked }
-            )
-            ToggleRow(
-                title = stringResource(R.string.run_on_mobile_data_title),
-                checked = syncOnMobileData,
-                enabled = globalRunOnMobileDataEnabled,
-                onCheckedChange = { checked -> syncOnMobileData = checked }
-            )
-            ClickRow(
-                title = stringResource(R.string.power_source_title),
-                value = powerSourceLabels.getOrElse(powerSourceIndex) { "" },
-                enabled = globalRunOnAnyPowerSource
-            )
-            if (globalRunOnAnyPowerSource) {
-                SingleChoiceSegmentedButtonRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                ) {
-                    powerSourceLabels.forEachIndexed { index, label ->
-                        SegmentedButton(
-                            selected = powerSourceIndex == index,
-                            onClick = { powerSourceIndex = index },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index, count = powerSourceLabels.size
-                            )
-                        ) {
-                            Text(
-                                label,
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                ToggleRow(
+                    title = stringResource(R.string.run_on_metered_wifi_title),
+                    checked = syncOnMeteredWifi,
+                    enabled = globalRunOnMeteredWifiEnabled,
+                    onCheckedChange = { checked -> syncOnMeteredWifi = checked }
+                )
+                ToggleRow(
+                    title = stringResource(R.string.run_on_mobile_data_title),
+                    checked = syncOnMobileData,
+                    enabled = globalRunOnMobileDataEnabled,
+                    onCheckedChange = { checked -> syncOnMobileData = checked }
+                )
+                ClickRow(
+                    title = stringResource(R.string.power_source_title),
+                    value = powerSourceLabels.getOrElse(powerSourceIndex) { "" },
+                    enabled = globalRunOnAnyPowerSource
+                )
+                if (globalRunOnAnyPowerSource) {
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        powerSourceLabels.forEachIndexed { index, label ->
+                            SegmentedButton(
+                                selected = powerSourceIndex == index,
+                                onClick = { powerSourceIndex = index },
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index, count = powerSourceLabels.size
+                                )
+                            ) {
+                                Text(
+                                    label,
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }

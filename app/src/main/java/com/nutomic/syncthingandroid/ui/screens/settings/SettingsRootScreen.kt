@@ -11,6 +11,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.EntryProviderScope
 import com.nutomic.syncthingandroid.ui.LocalServiceTick
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.adaptive.ListDetailPaneContent
+import com.nutomic.syncthingandroid.ui.adaptive.ListDetailPaneRole
 import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.service.SyncthingService
 import me.zhanghai.compose.preference.Preference
@@ -18,7 +20,9 @@ import me.zhanghai.compose.preference.Preference
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 fun EntryProviderScope<SettingsRoute>.settingsRootEntry() {
     entry<SettingsRoute.Root>(metadata = ListDetailSceneStrategy.listPane()) {
-        SettingsRootScreen()
+        ListDetailPaneContent(ListDetailPaneRole.List) {
+            SettingsRootScreen()
+        }
     }
 }
 
@@ -39,51 +43,51 @@ fun SettingsRootScreen() {
             Preference(
                 title = { Text(stringResource(R.string.run_conditions_title)) },
                 summary = { Text(stringResource(R.string.run_conditions_summary)) },
-                onClick = { navigator.navigateTo(SettingsRoute.RunConditions) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.RunConditions) },
             )
         }
         item {
             Preference(
                 title = { Text(stringResource(R.string.category_user_interface)) },
-                onClick = { navigator.navigateTo(SettingsRoute.UserInterface) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.UserInterface) },
             )
         }
         item {
             Preference(
                 title = { Text(stringResource(R.string.category_behaviour)) },
-                onClick = { navigator.navigateTo(SettingsRoute.Behavior) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.Behavior) },
             )
         }
         item {
             Preference(
                 title = { Text(stringResource(R.string.category_syncthing_options)) },
                 summary = { Text(stringResource(R.string.category_syncthing_options_summary)) },
-                onClick = { navigator.navigateTo(SettingsRoute.SyncthingOptions) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.SyncthingOptions) },
                 enabled = isSyncthingOptionsEnabled,
             )
         }
         item {
             Preference(
                 title = { Text(stringResource(R.string.category_backup)) },
-                onClick = { navigator.navigateTo(SettingsRoute.ImportExport) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.ImportExport) },
             )
         }
         item {
             Preference(
                 title = { Text(stringResource(R.string.category_debug)) },
-                onClick = { navigator.navigateTo(SettingsRoute.Troubleshooting) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.Troubleshooting) },
             )
         }
         item {
             Preference(
                 title = { Text(stringResource(R.string.category_experimental)) },
-                onClick = { navigator.navigateTo(SettingsRoute.Experimental) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.Experimental) },
             )
         }
         item {
             Preference(
                 title = { Text(stringResource(R.string.category_about)) },
-                onClick = { navigator.navigateTo(SettingsRoute.About) },
+                onClick = { navigator.navigateToRootDetail(SettingsRoute.About) },
             )
         }
     }

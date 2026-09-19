@@ -15,6 +15,13 @@ import com.nutomic.syncthingandroid.util.isTelevision
 /** Default cap for single-column content on wide windows (tablets, desktop mode). */
 val AdaptiveContentMaxWidth: Dp = 840.dp
 
+/** Horizontal inset that aligns screen-level controls (for example a FAB) to capped content. */
+fun adaptiveContentSideInset(
+    availableWidth: Dp,
+    isTelevision: Boolean,
+    maxWidth: Dp = AdaptiveContentMaxWidth,
+): Dp = if (isTelevision) 0.dp else ((availableWidth - maxWidth) / 2).coerceAtLeast(0.dp)
+
 /**
  * Centres [content] and caps its width on wide windows so single-column screens do not
  * stretch across a whole tablet. Compact windows keep the full width.

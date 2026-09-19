@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -54,6 +56,8 @@ import com.nutomic.syncthingandroid.service.SafBridge
 import com.nutomic.syncthingandroid.service.SyncthingService
 import com.nutomic.syncthingandroid.ui.LocalServiceState
 import com.nutomic.syncthingandroid.ui.LocalSyncthingService
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveContent
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveContentSideInset
 import com.nutomic.syncthingandroid.ui.appPreferences
 import com.nutomic.syncthingandroid.ui.dialogs.ConfirmDialog
 import com.nutomic.syncthingandroid.ui.nav.AppNavigator
@@ -63,6 +67,7 @@ import com.nutomic.syncthingandroid.ui.nav.ResultBus
 import com.nutomic.syncthingandroid.util.ConfigRouter
 import com.nutomic.syncthingandroid.util.ConfigXml
 import com.nutomic.syncthingandroid.util.FileUtils
+import com.nutomic.syncthingandroid.util.isTelevision
 
 private const val TAG = "FolderEditScreen"
 
@@ -235,38 +240,48 @@ fun FolderEditScreen(
             },
         )
     }
-    Scaffold(
-        topBar = {
-            FolderEditTopBar(
-                holder = holder, isCreate = isCreate,
-                onDiscardChanges = { showDiscardDialog = true },
-                onDelete = { showDeleteDialog = true },
-            )
-        },
-        floatingActionButton = {
-            if (f != null) {
-                FloatingActionButton(
-                    onClick = { saveFolder() },
-                    modifier = Modifier.imePadding()
-                ) {
-                    Icon(
-                        Icons.Outlined.Save,
-                        stringResource(if (isCreate) R.string.create else R.string.save_title)
-                    )
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val contentSideInset = adaptiveContentSideInset(
+            availableWidth = maxWidth,
+            isTelevision = LocalConfiguration.current.isTelevision,
+        )
+        Scaffold(
+            topBar = {
+                FolderEditTopBar(
+                    holder = holder, isCreate = isCreate,
+                    onDiscardChanges = { showDiscardDialog = true },
+                    onDelete = { showDeleteDialog = true },
+                )
+            },
+            floatingActionButton = {
+                if (f != null) {
+                    FloatingActionButton(
+                        onClick = { saveFolder() },
+                        modifier = Modifier
+                            .imePadding()
+                            .padding(end = contentSideInset),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Save,
+                            stringResource(if (isCreate) R.string.create else R.string.save_title)
+                        )
+                    }
                 }
             }
+        ) { innerPadding ->
+            AdaptiveContent {
+                FolderEditBody(
+                    holder = holder, folder = f, isCreate = isCreate,
+                    prefExpertMode = prefExpertMode, innerPadding = innerPadding,
+                    launchSafPicker = { safLauncher.launch(it) },
+                    onFolderTypeDialogApproved = { showFolderTypeDialog = true },
+                    onShowPullOrderDialog = { showPullOrderDialog = true },
+                    onShowVersioningDialog = { showVersioningDialog = true },
+                    onMarkDirty = { holder.needsUpdate = true },
+                    onRefreshGroupOptions = refreshGroupOptions,
+                )
+            }
         }
-    ) { innerPadding ->
-        FolderEditBody(
-            holder = holder, folder = f, isCreate = isCreate,
-            prefExpertMode = prefExpertMode, innerPadding = innerPadding,
-            launchSafPicker = { safLauncher.launch(it) },
-            onFolderTypeDialogApproved = { showFolderTypeDialog = true },
-            onShowPullOrderDialog = { showPullOrderDialog = true },
-            onShowVersioningDialog = { showVersioningDialog = true },
-            onMarkDirty = { holder.needsUpdate = true },
-            onRefreshGroupOptions = refreshGroupOptions,
-        )
     }
     // ---- Dialogs ----
     FolderEditConfigDialogs(

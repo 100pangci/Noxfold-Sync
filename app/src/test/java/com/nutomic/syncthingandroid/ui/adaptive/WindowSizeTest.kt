@@ -1,5 +1,6 @@
 package com.nutomic.syncthingandroid.ui.adaptive
 
+import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowSizeClass
 import androidx.window.core.layout.computeWindowSizeClass
 import org.junit.Assert.assertEquals
@@ -26,5 +27,12 @@ class WindowSizeTest {
     fun widthFromExpandedBreakpoint_isExpanded() {
         assertEquals(AdaptiveWidthClass.Expanded, widthClass(840f))
         assertEquals(AdaptiveWidthClass.Expanded, widthClass(1280f))
+    }
+
+    @Test
+    fun contentSideInset_centresWideContentAndLeavesCompactAlone() {
+        assertEquals(0.dp, adaptiveContentSideInset(600.dp, isTelevision = false))
+        assertEquals(180.dp, adaptiveContentSideInset(1200.dp, isTelevision = false))
+        assertEquals(0.dp, adaptiveContentSideInset(1200.dp, isTelevision = true))
     }
 }
