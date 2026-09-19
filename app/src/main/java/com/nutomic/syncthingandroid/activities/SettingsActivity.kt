@@ -67,6 +67,8 @@ class SettingsActivity : SyncthingActivity() {
                     private val backGuard = BackPressGuard()
 
                     override fun navigateTo(route: SettingsRoute) {
+                        // Ignore taps that would push the destination that is already open.
+                        if (backStack.lastOrNull() == route) return
                         backStack.add(route)
                     }
                     override fun navigateBack() {

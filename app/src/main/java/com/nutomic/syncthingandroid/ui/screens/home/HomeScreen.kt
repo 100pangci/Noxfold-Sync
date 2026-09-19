@@ -164,6 +164,7 @@ fun HomeScreen(
                     onSelectTab = { index ->
                         scope.launch { pagerState.animateScrollToPage(index) }
                     },
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
                 )
             }
             Scaffold(
@@ -171,8 +172,12 @@ fun HomeScreen(
                     TopAppBar(
                         title = { Text(stringResource(R.string.app_name)) },
                         navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+                            // With the rail the drawer button lives in the rail header at
+                            // the top-left of the window (see HomeNavigationRail).
+                            if (!useNavigationRail) {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+                                }
                             }
                         },
                         actions = {
@@ -302,13 +307,23 @@ fun HomeScreen(
 
 /**
  * Primary destinations as a Material 3 navigation rail for tablet and desktop windows.
+ * The drawer button sits in the rail header so it stays at the window's top-left corner
+ * instead of drifting right with the top bar.
  */
 @Composable
 private fun HomeNavigationRail(
     selectedTab: Int,
     onSelectTab: (Int) -> Unit,
+    onOpenDrawer: () -> Unit,
 ) {
-    NavigationRail(modifier = Modifier.fillMaxHeight()) {
+    NavigationRail(
+        modifier = Modifier.fillMaxHeight(),
+        header = {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Outlined.Menu, stringResource(R.string.main_menu))
+            }
+        },
+    ) {
         TAB_TITLES.forEachIndexed { index, titleRes ->
             val selected = selectedTab == index
             NavigationRailItem(

@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberListDetailDirective
 import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.nav.BACK_PEEK_PAD_DP
 import com.nutomic.syncthingandroid.ui.nav.backPopTransform
@@ -131,7 +132,9 @@ fun SettingsNavDisplay(
     // panes at the expanded width breakpoint, 840dp). Televisions stay single-pane too.
     val useListDetail = !LocalConfiguration.current.isTelevision &&
         rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
-    val listDetailStrategy = rememberListDetailSceneStrategy<SettingsRoute>()
+    val listDetailStrategy = rememberListDetailSceneStrategy<SettingsRoute>(
+        directive = rememberListDetailDirective(),
+    )
     val sceneStrategy: SceneStrategy<SettingsRoute> =
         if (useListDetail) {
             listDetailStrategy then SinglePaneSceneStrategy()

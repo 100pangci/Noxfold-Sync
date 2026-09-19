@@ -105,6 +105,11 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
                         private val backGuard = BackPressGuard()
 
                         override fun navigateTo(route: AppRoute) {
+                            // Ignore taps that would push the destination that is already
+                            // open (double taps, or tapping the item again while its editor
+                            // sits in the detail pane): back would return to the same
+                            // screen again instead of moving on.
+                            if (backStack.lastOrNull() == route) return
                             backStack.add(route)
                         }
 

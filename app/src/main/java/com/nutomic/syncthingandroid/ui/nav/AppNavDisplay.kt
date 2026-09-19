@@ -31,6 +31,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.navigationevent.NavigationEvent
 import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
 import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberListDetailDirective
 import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.util.isTelevision
 
@@ -117,7 +118,9 @@ fun <T : NavKey> AppNavDisplay(
 
     val useListDetail = !LocalConfiguration.current.isTelevision &&
         rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
-    val listDetailStrategy = rememberListDetailSceneStrategy<T>()
+    val listDetailStrategy = rememberListDetailSceneStrategy<T>(
+        directive = rememberListDetailDirective(),
+    )
     val sceneStrategy: SceneStrategy<T> =
         if (useListDetail) {
             listDetailStrategy then SinglePaneSceneStrategy()
