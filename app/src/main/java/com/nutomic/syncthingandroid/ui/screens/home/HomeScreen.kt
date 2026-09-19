@@ -74,6 +74,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -157,25 +158,39 @@ fun HomeScreen(
     val windowWidthClass = rememberWindowSizeClass().adaptiveWidthClass
     val useNavigationRail = !LocalConfiguration.current.isTelevision &&
         windowWidthClass != AdaptiveWidthClass.Compact
-    // Keep the rail selection independent from PagerState. Closing a detail pane changes
-    // NavDisplay's scene and can recompose the Home entry; PagerState alone made the rail
-    // snap back to Folders and left its selected indicator stale.
-    var railTab by rememberSaveable { mutableIntStateOf(TAB_FOLDERS) }
-    val pagerState = rememberPagerState(initialPage = railTab, pageCount = { 3 })
+
+    // Single source of truth for the selected destination: the rail drives it, the pager
+    // follows it (and reports swipes back). Previously the rail kept its own state while
+    // the pager kept another, so switching layouts could leave a stale selection that no
+    // longer matched the pager.
+    var selectedTab by rememberSaveable { mutableIntStateOf(TAB_FOLDERS) }
+    // Create a fresh pager for every compact session. Re-attaching the PagerState that
+    // was used before entering the rail layout left it stuck on its old page; a new
+    // state always starts on the currently selected destination.
+    val compactPagerState = if (useNavigationRail) {
+        null
+    } else {
+        rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
+    }
     val folderListState = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch)
     val deviceListState = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch)
-    LaunchedEffect(useNavigationRail) {
-        if (useNavigationRail) railTab = pagerState.currentPage
+    LaunchedEffect(compactPagerState) {
+        val pager = compactPagerState ?: return@LaunchedEffect
+        // settledPage only reports where a swipe came to rest, so a programmatic
+        // animation does not momentarily drag the selection back to the old page.
+        snapshotFlow { pager.settledPage }.collect { selectedTab = it }
     }
-    val activeTab = if (useNavigationRail) railTab else pagerState.currentPage
 
     fun selectTab(index: Int) {
+        // Re-selecting the active destination closes its detail pane; changing
+        // destinations closes it before paging.
         navigator.clearHomeDetail()
-        if (useNavigationRail) {
-            railTab = index
-        } else if (index != pagerState.currentPage) {
+        if (index == selectedTab) return
+        selectedTab = index
+        // The rail animates its own content; the pager follows the selection here.
+        compactPagerState?.let { pager ->
             scope.launch {
-                pagerState.animateScrollToPage(
+                pager.animateScrollToPage(
                     page = index,
                     animationSpec = tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing),
                 )
@@ -201,7 +216,7 @@ fun HomeScreen(
         Row(modifier = Modifier.fillMaxSize()) {
             if (useNavigationRail) {
                 HomeNavigationRail(
-                    selectedTab = railTab,
+                    selectedTab = selectedTab,
                     onSelectTab = ::selectTab,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                 )
@@ -233,7 +248,7 @@ fun HomeScreen(
                                 }
                             },
                             actions = {
-                                if (activeTab == TAB_FOLDERS) {
+                                if (selectedTab == TAB_FOLDERS) {
                                     IconButton(onClick = {
                                         if (api != null && apiConfigLoaded) {
                                             api.rescanAll()
@@ -262,7 +277,7 @@ fun HomeScreen(
                     floatingActionButton = {
                         // Add actions live on a bottom-right FAB (same spot as the folder
                         // editor's save button), tab-aware: each list tab adds its own kind.
-                        when (activeTab) {
+                        when (selectedTab) {
                             TAB_FOLDERS -> {
                                 FloatingActionButton(
                                     onClick = {
@@ -303,7 +318,7 @@ fun HomeScreen(
                                         else MaterialTheme.colorScheme.surfaceContainer
                                 ) {
                                     TAB_TITLES.forEachIndexed { index, titleRes ->
-                                        val selected = pagerState.currentPage == index
+                                        val selected = selectedTab == index
                                         NavigationBarItem(
                                             selected = selected,
                                             onClick = { selectTab(index) },
@@ -337,7 +352,7 @@ fun HomeScreen(
                     ) {
                         if (useNavigationRail) {
                             TabletHomeTabContent(
-                                selectedTab = railTab,
+                                selectedTab = selectedTab,
                                 folders = folders,
                                 devices = devices,
                                 serviceState = serviceState,
@@ -346,9 +361,9 @@ fun HomeScreen(
                                 folderListState = folderListState,
                                 deviceListState = deviceListState,
                             )
-                        } else {
+                        } else if (compactPagerState != null) {
                             HorizontalPager(
-                                state = pagerState,
+                                state = compactPagerState,
                                 modifier = Modifier.fillMaxSize(),
                                 // Keep all three pages composed. Without this, every tab
                                 // switch had to rebuild the target page's whole UI on the
@@ -366,7 +381,7 @@ fun HomeScreen(
                                     selectedDeviceId = selectedDeviceId,
                                     folderListState = folderListState,
                                     deviceListState = deviceListState,
-                                    statusVisible = pagerState.currentPage == TAB_STATUS,
+                                    statusVisible = compactPagerState.currentPage == TAB_STATUS,
                                 )
                             }
                         }
