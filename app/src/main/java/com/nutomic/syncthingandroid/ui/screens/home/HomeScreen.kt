@@ -6,6 +6,14 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListPrefetchScope
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.items
@@ -57,7 +66,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,6 +106,7 @@ import kotlinx.coroutines.launch
 private const val TAB_FOLDERS = 0
 private const val TAB_DEVICES = 1
 private const val TAB_STATUS = 2
+private const val HOME_TAB_TRANSITION_MILLIS = 280
 
 private val TAB_TITLES = intArrayOf(
     R.string.folders_fragment_title,
@@ -139,13 +151,37 @@ fun HomeScreen(
 
     val drawerState = rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = TAB_FOLDERS, pageCount = { 3 })
 
     // Tablets and desktop windows get a navigation rail; phones and TVs keep the bottom
     // bar (TVs because of their low height and D-pad navigation).
     val windowWidthClass = rememberWindowSizeClass().adaptiveWidthClass
     val useNavigationRail = !LocalConfiguration.current.isTelevision &&
         windowWidthClass != AdaptiveWidthClass.Compact
+    // Keep the rail selection independent from PagerState. Closing a detail pane changes
+    // NavDisplay's scene and can recompose the Home entry; PagerState alone made the rail
+    // snap back to Folders and left its selected indicator stale.
+    var railTab by rememberSaveable { mutableIntStateOf(TAB_FOLDERS) }
+    val pagerState = rememberPagerState(initialPage = railTab, pageCount = { 3 })
+    val folderListState = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch)
+    val deviceListState = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch)
+    LaunchedEffect(useNavigationRail) {
+        if (useNavigationRail) railTab = pagerState.currentPage
+    }
+    val activeTab = if (useNavigationRail) railTab else pagerState.currentPage
+
+    fun selectTab(index: Int) {
+        navigator.clearHomeDetail()
+        if (useNavigationRail) {
+            railTab = index
+        } else if (index != pagerState.currentPage) {
+            scope.launch {
+                pagerState.animateScrollToPage(
+                    page = index,
+                    animationSpec = tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing),
+                )
+            }
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -165,15 +201,8 @@ fun HomeScreen(
         Row(modifier = Modifier.fillMaxSize()) {
             if (useNavigationRail) {
                 HomeNavigationRail(
-                    selectedTab = pagerState.currentPage,
-                    onSelectTab = { index ->
-                        // Re-selecting the active top-level destination closes its
-                        // detail pane; changing destinations closes it before paging.
-                        navigator.clearHomeDetail()
-                        if (index != pagerState.currentPage) {
-                            scope.launch { pagerState.animateScrollToPage(index) }
-                        }
-                    },
+                    selectedTab = railTab,
+                    onSelectTab = ::selectTab,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                 )
             }
@@ -204,7 +233,7 @@ fun HomeScreen(
                                 }
                             },
                             actions = {
-                                if (pagerState.currentPage == TAB_FOLDERS) {
+                                if (activeTab == TAB_FOLDERS) {
                                     IconButton(onClick = {
                                         if (api != null && apiConfigLoaded) {
                                             api.rescanAll()
@@ -233,7 +262,7 @@ fun HomeScreen(
                     floatingActionButton = {
                         // Add actions live on a bottom-right FAB (same spot as the folder
                         // editor's save button), tab-aware: each list tab adds its own kind.
-                        when (pagerState.currentPage) {
+                        when (activeTab) {
                             TAB_FOLDERS -> {
                                 FloatingActionButton(
                                     onClick = {
@@ -277,12 +306,7 @@ fun HomeScreen(
                                         val selected = pagerState.currentPage == index
                                         NavigationBarItem(
                                             selected = selected,
-                                            onClick = {
-                                                if (!selected) {
-                                                    navigator.clearHomeDetail()
-                                                    scope.launch { pagerState.animateScrollToPage(index) }
-                                                }
-                                            },
+                                            onClick = { selectTab(index) },
                                             icon = {
                                                 Icon(
                                                     imageVector = if (selected) TAB_ICONS[index].first else TAB_ICONS[index].second,
@@ -311,31 +335,38 @@ fun HomeScreen(
                             .fillMaxSize()
                             .padding(innerPadding),
                     ) {
-                        HorizontalPager(
-                            state = pagerState,
-                            // Rail navigation replaces the swipe gesture on large screens
-                            // (predictive back owns the edges there anyway).
-                            userScrollEnabled = !useNavigationRail,
-                            modifier = Modifier.fillMaxSize(),
-                            // Keep all three pages composed. Without this, every tab
-                            // switch had to rebuild the target page's whole UI on the
-                            // main thread mid-animation, which showed up as jank. Pages
-                            // now persist (including their scroll positions) and tab
-                            // switches only move the scroll offset.
-                            beyondViewportPageCount = 2
-                        ) { page ->
-                            when (page) {
-                                TAB_FOLDERS -> FolderListPage(
+                        if (useNavigationRail) {
+                            TabletHomeTabContent(
+                                selectedTab = railTab,
+                                folders = folders,
+                                devices = devices,
+                                serviceState = serviceState,
+                                selectedFolderId = selectedFolderId,
+                                selectedDeviceId = selectedDeviceId,
+                                folderListState = folderListState,
+                                deviceListState = deviceListState,
+                            )
+                        } else {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize(),
+                                // Keep all three pages composed. Without this, every tab
+                                // switch had to rebuild the target page's whole UI on the
+                                // main thread mid-animation, which showed up as jank. Pages
+                                // now persist (including their scroll positions) and tab
+                                // switches only move the scroll offset.
+                                beyondViewportPageCount = 2
+                            ) { page ->
+                                HomeTabPage(
+                                    tab = page,
                                     folders = folders,
-                                    selectedFolderId = selectedFolderId,
-                                )
-                                TAB_DEVICES -> DeviceListPage(
                                     devices = devices,
-                                    selectedDeviceId = selectedDeviceId,
-                                )
-                                else -> StatusPage(
                                     serviceState = serviceState,
-                                    visible = pagerState.currentPage == TAB_STATUS
+                                    selectedFolderId = selectedFolderId,
+                                    selectedDeviceId = selectedDeviceId,
+                                    folderListState = folderListState,
+                                    deviceListState = deviceListState,
+                                    statusVisible = pagerState.currentPage == TAB_STATUS,
                                 )
                             }
                         }
@@ -343,6 +374,80 @@ fun HomeScreen(
                 }
             }
         }
+    }
+}
+
+/** Animated, state-driven destinations for the tablet navigation rail. */
+@Composable
+private fun TabletHomeTabContent(
+    selectedTab: Int,
+    folders: List<FolderUiModel>?,
+    devices: List<DeviceUiModel>?,
+    serviceState: SyncthingService.State,
+    selectedFolderId: String?,
+    selectedDeviceId: String?,
+    folderListState: LazyListState,
+    deviceListState: LazyListState,
+) {
+    AnimatedContent(
+        targetState = selectedTab,
+        transitionSpec = {
+            val direction = if (targetState > initialState) 1 else -1
+            (
+                slideInHorizontally(
+                    animationSpec = tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing),
+                    initialOffsetX = { direction * it / 10 },
+                ) + fadeIn(tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing))
+            ) togetherWith (
+                slideOutHorizontally(
+                    animationSpec = tween(HOME_TAB_TRANSITION_MILLIS, easing = FastOutSlowInEasing),
+                    targetOffsetX = { -direction * it / 10 },
+                ) + fadeOut(tween(HOME_TAB_TRANSITION_MILLIS / 2))
+            )
+        },
+        label = "tablet-home-tab",
+    ) { tab ->
+        HomeTabPage(
+            tab = tab,
+            folders = folders,
+            devices = devices,
+            serviceState = serviceState,
+            selectedFolderId = selectedFolderId,
+            selectedDeviceId = selectedDeviceId,
+            folderListState = folderListState,
+            deviceListState = deviceListState,
+            statusVisible = tab == TAB_STATUS,
+        )
+    }
+}
+
+@Composable
+private fun HomeTabPage(
+    tab: Int,
+    folders: List<FolderUiModel>?,
+    devices: List<DeviceUiModel>?,
+    serviceState: SyncthingService.State,
+    selectedFolderId: String?,
+    selectedDeviceId: String?,
+    folderListState: LazyListState,
+    deviceListState: LazyListState,
+    statusVisible: Boolean,
+) {
+    when (tab) {
+        TAB_FOLDERS -> FolderListPage(
+            folders = folders,
+            selectedFolderId = selectedFolderId,
+            listState = folderListState,
+        )
+        TAB_DEVICES -> DeviceListPage(
+            devices = devices,
+            selectedDeviceId = selectedDeviceId,
+            listState = deviceListState,
+        )
+        else -> StatusPage(
+            serviceState = serviceState,
+            visible = statusVisible,
+        )
     }
 }
 
@@ -387,6 +492,7 @@ private fun HomeNavigationRail(
 private fun FolderListPage(
     folders: List<FolderUiModel>?,
     selectedFolderId: String?,
+    listState: LazyListState,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
@@ -514,7 +620,7 @@ private fun FolderListPage(
         }
     }
     LazyColumn(
-        state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
@@ -556,6 +662,7 @@ private fun FolderListPage(
 private fun DeviceListPage(
     devices: List<DeviceUiModel>?,
     selectedDeviceId: String?,
+    listState: LazyListState,
 ) {
     val context = LocalContext.current
     val navigator = LocalAppNavigator.current
@@ -601,7 +708,7 @@ private fun DeviceListPage(
         }
     }
     LazyColumn(
-        state = rememberLazyListState(prefetchStrategy = NoLazyListPrefetch),
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
