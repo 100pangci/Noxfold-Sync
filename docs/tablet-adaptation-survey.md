@@ -79,7 +79,8 @@
 
 ### P0 基础设施
 - 添加依赖与版本目录条目；封装 `LocalWindowSizeClass` / `rememberWindowSizeClass()`。
-- 引入统一的“内容最大宽度”组件（如 `AdaptiveContent(maxWidth = 840.dp)`：宽屏居中、窄屏全宽），先在编辑页/设置页替换裸 `fillMaxWidth`。
+- 引入统一的“内容最大宽度”组件（如 `AdaptiveContent(maxWidth = 840.dp)`：宽屏居中、窄屏全宽、TV 不限宽），先在设置页替换裸 `fillMaxWidth`。
+- 编辑页（folder/device）暂不单独限宽：`Scaffold` 的 FAB 是屏幕级锚定的，内容居中后 FAB 会脱离内容柱，留到 P2 与分栏一起处理。
 - 建立测试矩阵：平板模拟器（可调整尺寸）、折叠屏、TV（回归）、手机横屏、分屏模式。
 
 ### P1 Home 导航壳
@@ -89,7 +90,7 @@
 
 ### P2 双栏（list-detail）
 - 设置：`SettingsNavDisplay` 接入 `ListDetailSceneStrategy`，Root 为列表栏，子页为详情栏；compact 自动回退单栏推入（保留现有的过场动画）。
-- Home：文件夹/设备列表作为列表栏，`FolderEdit`/`DeviceEdit` 作为详情栏；编辑草稿已由 `EditStateStore` 按路由保存，天然支持双栏来回切换。
+- Home：文件夹/设备列表作为列表栏，`FolderEdit`/`DeviceEdit` 作为详情栏；编辑草稿已由 `EditStateStore` 按路由保存，天然支持双栏来回切换。编辑页进入详情栏后再做内容限宽，FAB 随详情栏对齐。
 - 文件夹选择器：expanded 时根列表与当前目录并排。
 
 ### P3 逐屏收尾

@@ -15,6 +15,7 @@ dependencies {
     implementation(libs.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.window)
     implementation(libs.android.material)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
