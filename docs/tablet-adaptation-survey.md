@@ -11,6 +11,11 @@
 - 依赖里没有 `material3-adaptive`，也没有显式 `androidx.window`（`window` 仅作为 Compose UI 的 runtime 传递依赖存在，编译期不可用）。
 - 建议路线：P0 窗口尺寸基础设施 → P1 Home 导航壳（Rail/常驻抽屉）→ P2 设置与 Home 的 list-detail 双栏 → P3 逐屏收尾（表单宽度、文件夹选择器、对话框）→ P4 状态保持与测试。
 
+## 进展
+
+- P0：`androidx.window:window-core` 依赖、`rememberWindowSizeClass()` / `adaptiveWidthClass`（M3 断点）、`AdaptiveContent`（840dp 上限、TV 不限宽）、设置页接入、断点单测。
+- P1：Home 在 ≥600dp 宽度且非 TV 时使用 `NavigationRail`（手机与 TV 保持底栏），宽屏禁用 Pager 横滑；rail 接管 start/vertical insets，避免 edge-to-edge 双重内边距。
+
 ## 1. 现状
 
 ### 1.1 架构
