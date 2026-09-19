@@ -15,6 +15,8 @@
 
 - P0：`androidx.window:window-core` 依赖、`rememberWindowSizeClass()` / `adaptiveWidthClass`（M3 断点）、`AdaptiveContent`（840dp 上限、TV 不限宽）、设置页接入、断点单测。
 - P1：Home 在 ≥600dp 宽度且非 TV 时使用 `NavigationRail`（手机与 TV 保持底栏），宽屏禁用 Pager 横滑；rail 接管 start/vertical insets，避免 edge-to-edge 双重内边距。
+- P2（设置页）：接入 `adaptive-navigation3` 1.3.0；设置根列表为 list pane、子页为 detail pane，宽度 ≥840dp（expanded）且非 TV 时双栏，窄屏继续走原有单栏推入与转场；宽屏下场景切换（详情栏出现/消失）用淡入淡出，详情之间的切换由 pane scaffold 内部动画处理，不触发整屏过场。
+- 待办：Home 的文件夹/设备编辑双栏（编辑器作为详情栏、FAB 随详情栏对齐）尚未做，见 P2。
 
 ## 1. 现状
 

@@ -59,7 +59,7 @@ import me.zhanghai.compose.preference.PreferenceCategory
 private const val MAX_PEM_BYTES = 512 * 1024
 
 fun EntryProviderScope<SettingsRoute>.settingsCustomCertificateEntry() {
-    entry<SettingsRoute.CustomCertificate> {
+    settingsDetailEntry<SettingsRoute.CustomCertificate> {
         SettingsCustomCertificateScreen()
     }
 }

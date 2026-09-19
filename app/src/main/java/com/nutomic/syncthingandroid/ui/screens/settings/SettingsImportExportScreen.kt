@@ -56,7 +56,7 @@ import me.zhanghai.compose.preference.rememberPreferenceState
 
 
 fun EntryProviderScope<SettingsRoute>.settingsImportExportEntry() {
-    entry<SettingsRoute.ImportExport> {
+    settingsDetailEntry<SettingsRoute.ImportExport> {
         SettingsImportExportScreen()
     }
 }

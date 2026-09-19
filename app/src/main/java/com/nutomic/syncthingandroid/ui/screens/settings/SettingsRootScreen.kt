@@ -1,6 +1,8 @@
 package com.nutomic.syncthingandroid.ui.screens.settings
 
 import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -13,8 +15,9 @@ import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.service.SyncthingService
 import me.zhanghai.compose.preference.Preference
 
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
 fun EntryProviderScope<SettingsRoute>.settingsRootEntry() {
-    entry<SettingsRoute.Root> {
+    entry<SettingsRoute.Root>(metadata = ListDetailSceneStrategy.listPane()) {
         SettingsRootScreen()
     }
 }

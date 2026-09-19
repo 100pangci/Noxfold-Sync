@@ -27,7 +27,7 @@ import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.ui.theme.ApplicationTheme
 
 fun EntryProviderScope<SettingsRoute>.licensesEntry() {
-    entry<SettingsRoute.Licenses> {
+    settingsDetailEntry<SettingsRoute.Licenses> {
         LicensesScreen()
     }
 }

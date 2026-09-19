@@ -25,7 +25,7 @@ import me.zhanghai.compose.preference.Preference
 private const val TAG = "SettingsAboutScreen"
 
 fun EntryProviderScope<SettingsRoute>.settingsAboutEntry() {
-    entry<SettingsRoute.About> {
+    settingsDetailEntry<SettingsRoute.About> {
         SettingsAboutScreen()
     }
 }

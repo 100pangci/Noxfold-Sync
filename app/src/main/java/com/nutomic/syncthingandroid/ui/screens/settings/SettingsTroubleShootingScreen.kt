@@ -29,7 +29,7 @@ import me.zhanghai.compose.preference.rememberPreferenceState
 
 
 fun EntryProviderScope<SettingsRoute>.settingsTroubleshootingEntry() {
-    entry<SettingsRoute.Troubleshooting> {
+    settingsDetailEntry<SettingsRoute.Troubleshooting> {
         SettingsTroubleshootingScreen()
     }
 }

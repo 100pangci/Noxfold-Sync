@@ -16,7 +16,7 @@ import me.zhanghai.compose.preference.rememberPreferenceState
 
 
 fun EntryProviderScope<SettingsRoute>.settingsExperimentalEntry() {
-    entry<SettingsRoute.Experimental> {
+    settingsDetailEntry<SettingsRoute.Experimental> {
         SettingsExperimentalScreen()
     }
 }

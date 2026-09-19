@@ -1,10 +1,19 @@
 package com.nutomic.syncthingandroid.ui.screens.settings
 
 import android.util.Log
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.saveable.rememberSerializable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -15,17 +24,26 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.serialization.NavBackStackSerializer
 import androidx.navigation3.runtime.serialization.NavKeySerializer
+import androidx.navigation3.scene.Scene
+import androidx.navigation3.scene.SceneStrategy
+import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.nav.BACK_PEEK_PAD_DP
 import com.nutomic.syncthingandroid.ui.nav.backPopTransform
 import com.nutomic.syncthingandroid.ui.nav.backPredictivePopTransform
+import com.nutomic.syncthingandroid.util.isTelevision
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -104,7 +122,7 @@ fun rememberSettingsNavBackStack(startDestination: SettingsRoute): NavBackStack<
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun SettingsNavDisplay(
     backStack: NavBackStack<SettingsRoute>
@@ -112,9 +130,33 @@ fun SettingsNavDisplay(
     val navigator = LocalSettingsNavigator.current
     val peekPadPx = with(LocalDensity.current) { BACK_PEEK_PAD_DP.dp.roundToPx() }
 
+    // On large windows the root list and the current sub-screen become a list-detail
+    // pair; compact and medium windows keep the single-pane push navigation (and its
+    // transitions), because ListDetailSceneStrategy yields to the chained
+    // SinglePaneSceneStrategy whenever only one pane fits (its directive switches to two
+    // panes at the expanded width breakpoint, 840dp). Televisions stay single-pane too.
+    val useListDetail = !LocalConfiguration.current.isTelevision &&
+        rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
+    val listDetailStrategy = rememberListDetailSceneStrategy<SettingsRoute>()
+    val sceneStrategy: SceneStrategy<SettingsRoute> =
+        if (useListDetail) {
+            listDetailStrategy then SinglePaneSceneStrategy()
+        } else {
+            SinglePaneSceneStrategy()
+        }
+
+    // Scene changes on large screens are the detail pane appearing or disappearing;
+    // cross-fading avoids sliding the whole list (and rendering it twice). Detail
+    // switches themselves do not change the scene and are animated by the pane scaffold.
+    val listDetailSceneTransform: AnimatedContentTransitionScope<Scene<SettingsRoute>>.() -> ContentTransform = {
+        fadeIn(tween(220, easing = LinearEasing)) togetherWith
+                fadeOut(tween(90, easing = LinearEasing))
+    }
+
     NavDisplay(
         backStack = backStack,
         onBack = { navigator.navigateBack() },
+        sceneStrategies = listOf(sceneStrategy),
         entryProvider = entryProvider {
             settingsRootEntry()
             settingsRunConditionsEntry()
@@ -129,12 +171,21 @@ fun SettingsNavDisplay(
             licensesEntry()
         },
         transitionSpec = {
-            // Slide in from right when navigating forward
-            slideInHorizontally(initialOffsetX = { it }) togetherWith
-                    slideOutHorizontally(targetOffsetX = { -it })
+            if (useListDetail) {
+                listDetailSceneTransform()
+            } else {
+                // Slide in from right when navigating forward
+                slideInHorizontally(initialOffsetX = { it }) togetherWith
+                        slideOutHorizontally(targetOffsetX = { -it })
+            }
         },
-        popTransitionSpec = { backPopTransform() },
-        predictivePopTransitionSpec = { swipeEdge -> backPredictivePopTransform(swipeEdge, peekPadPx) },
+        popTransitionSpec = {
+            if (useListDetail) listDetailSceneTransform() else backPopTransform()
+        },
+        predictivePopTransitionSpec = { swipeEdge ->
+            if (useListDetail) listDetailSceneTransform()
+            else backPredictivePopTransform(swipeEdge, peekPadPx)
+        },
         modifier = Modifier.onKeyEvent { keyEvent ->
             if (keyEvent.key == Key.DirectionLeft
                 && keyEvent.type == KeyEventType.KeyDown) {
@@ -145,4 +196,15 @@ fun SettingsNavDisplay(
             }
         }
     )
+}
+
+/**
+ * Registers a settings destination as the detail pane of the list-detail scaffold. On
+ * compact windows it behaves exactly like [EntryProviderScope.entry].
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+internal inline fun <reified T : SettingsRoute> EntryProviderScope<SettingsRoute>.settingsDetailEntry(
+    noinline content: @Composable (T) -> Unit,
+) {
+    entry<T>(metadata = ListDetailSceneStrategy.detailPane(), content = content)
 }
