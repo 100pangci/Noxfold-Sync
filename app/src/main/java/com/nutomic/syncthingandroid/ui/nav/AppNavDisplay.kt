@@ -1,5 +1,6 @@
 package com.nutomic.syncthingandroid.ui.nav
 
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,16 +13,26 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.scene.Scene
+import androidx.navigation3.scene.SceneStrategy
+import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigationevent.NavigationEvent
+import com.nutomic.syncthingandroid.ui.adaptive.AdaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.adaptiveWidthClass
+import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
+import com.nutomic.syncthingandroid.util.isTelevision
 
 // Back-transition motion parameters, referenced from PiliNara's predictive back
 // implementation (Flutter material_ui 1.1.0, shared element + fade forwards):
@@ -76,8 +87,25 @@ internal fun backPredictivePopTransform(swipeEdge: Int, peekPadPx: Int): Content
 }
 
 /**
- * Thin wrapper around the Navigation 3 NavDisplay with shared transition specs.
+ * Cross-fade for the appearance or disappearance of a list-detail scene on large
+ * windows. Sliding would move the whole list pane (and render it twice); switching
+ * between details does not change the scene and is animated by the pane scaffold.
  */
+internal const val SCENE_CROSS_FADE_IN_MILLIS = 220
+internal const val SCENE_CROSS_FADE_OUT_MILLIS = 90
+
+internal fun <T : Any> AnimatedContentTransitionScope<Scene<T>>.sceneCrossFade(): ContentTransform =
+    fadeIn(tween(SCENE_CROSS_FADE_IN_MILLIS, easing = LinearEasing)) togetherWith
+            fadeOut(tween(SCENE_CROSS_FADE_OUT_MILLIS, easing = LinearEasing))
+
+/**
+ * Thin wrapper around the Navigation 3 NavDisplay with shared transition specs.
+ *
+ * On expanded, non-television windows the list-detail scene strategy takes over when
+ * both panes fit: routes marked as list/detail panes (see MainActivity) are shown side
+ * by side. Compact windows and televisions keep the single-pane navigation.
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun <T : NavKey> AppNavDisplay(
     backStack: NavBackStack<T>,
@@ -86,16 +114,37 @@ fun <T : NavKey> AppNavDisplay(
     entryProvider: EntryProviderScope<T>.() -> Unit,
 ) {
     val peekPadPx = with(LocalDensity.current) { BACK_PEEK_PAD_DP.dp.roundToPx() }
+
+    val useListDetail = !LocalConfiguration.current.isTelevision &&
+        rememberWindowSizeClass().adaptiveWidthClass == AdaptiveWidthClass.Expanded
+    val listDetailStrategy = rememberListDetailSceneStrategy<T>()
+    val sceneStrategy: SceneStrategy<T> =
+        if (useListDetail) {
+            listDetailStrategy then SinglePaneSceneStrategy()
+        } else {
+            SinglePaneSceneStrategy()
+        }
+
     NavDisplay(
         backStack = backStack,
         onBack = onBack,
+        sceneStrategies = listOf(sceneStrategy),
         entryProvider = entryProvider(builder = entryProvider),
         transitionSpec = {
-            slideInHorizontally(tween(350, easing = FastOutSlowInEasing)) { it } togetherWith
-                    slideOutHorizontally(tween(350, easing = FastOutSlowInEasing)) { -it }
+            if (useListDetail) {
+                sceneCrossFade()
+            } else {
+                slideInHorizontally(tween(350, easing = FastOutSlowInEasing)) { it } togetherWith
+                        slideOutHorizontally(tween(350, easing = FastOutSlowInEasing)) { -it }
+            }
         },
-        popTransitionSpec = { backPopTransform() },
-        predictivePopTransitionSpec = { swipeEdge -> backPredictivePopTransform(swipeEdge, peekPadPx) },
+        popTransitionSpec = {
+            if (useListDetail) sceneCrossFade() else backPopTransform()
+        },
+        predictivePopTransitionSpec = { swipeEdge ->
+            if (useListDetail) sceneCrossFade()
+            else backPredictivePopTransform(swipeEdge, peekPadPx)
+        },
         modifier = modifier,
     )
 }

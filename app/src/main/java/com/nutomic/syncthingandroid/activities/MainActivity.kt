@@ -8,6 +8,8 @@ import android.os.IBinder
 import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,6 +19,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.serialization.NavBackStackSerializer
@@ -77,6 +80,7 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
         serviceState = currentState
     }
 
+    @OptIn(ExperimentalMaterial3AdaptiveApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         preferences = (application as SyncthingApp).preferences
         super.onCreate(savedInstanceState)
@@ -158,7 +162,12 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
                             backStack = backStack,
                             onBack = { navigator.navigateBack() },
                             entryProvider = {
-                                entry<AppRoute.Home> {
+                                entry<AppRoute.Home>(
+                                    // Wide windows show the home list and the editor side
+                                    // by side; the pane must fit the rail plus the list.
+                                    metadata = ListDetailSceneStrategy.listPane() +
+                                        ListDetailSceneStrategy.preferredPaneSize(width = 440.dp),
+                                ) {
                                     HomeScreen(onExitApp = { doExit() })
                                 }
                             entry<AppRoute.Log> {
@@ -167,14 +176,18 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
                             entry<AppRoute.WebView> { route ->
                                 WebViewScreen(webPageUrl = route.url, onBack = { navigator.navigateBack() })
                             }
-                            entry<AppRoute.SyncConditions> { route ->
+                            entry<AppRoute.SyncConditions>(
+                                metadata = ListDetailSceneStrategy.detailPane(),
+                            ) { route ->
                                 SyncConditionsScreen(
                                     objectPrefixAndId = route.objectPrefixAndId,
                                     objectReadableName = route.objectReadableName,
                                     onBack = { navigator.navigateBack() },
                                 )
                             }
-                            entry<AppRoute.FolderPicker> { route ->
+                            entry<AppRoute.FolderPicker>(
+                                metadata = ListDetailSceneStrategy.detailPane(),
+                            ) { route ->
                                 com.nutomic.syncthingandroid.ui.screens.folderpicker.FolderPickerScreen(
                                     initialDirectory = route.initialDirectory,
                                     rootDirectory = route.rootDirectory,
@@ -186,7 +199,9 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
                                     }
                                 )
                             }
-                            entry<AppRoute.DeviceEdit> { route ->
+                            entry<AppRoute.DeviceEdit>(
+                                metadata = ListDetailSceneStrategy.detailPane(),
+                            ) { route ->
                                 com.nutomic.syncthingandroid.ui.screens.device.DeviceEditScreen(
                                     deviceId = route.deviceId,
                                     deviceName = route.deviceName,
@@ -194,7 +209,9 @@ class MainActivity : SyncthingActivity(), OnServiceStateChangeListener {
                                     notificationId = route.notificationId,
                                 )
                             }
-                            entry<AppRoute.FolderEdit> { route ->
+                            entry<AppRoute.FolderEdit>(
+                                metadata = ListDetailSceneStrategy.detailPane(),
+                            ) { route ->
                                 com.nutomic.syncthingandroid.ui.screens.folder.FolderEditScreen(
                                     folderId = route.folderId,
                                     folderLabel = route.folderLabel,

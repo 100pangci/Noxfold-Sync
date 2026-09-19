@@ -1,12 +1,6 @@
 package com.nutomic.syncthingandroid.ui.screens.settings
 
 import android.util.Log
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -30,7 +24,6 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.serialization.NavBackStackSerializer
 import androidx.navigation3.runtime.serialization.NavKeySerializer
-import androidx.navigation3.scene.Scene
 import androidx.navigation3.scene.SceneStrategy
 import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
@@ -43,6 +36,7 @@ import com.nutomic.syncthingandroid.ui.adaptive.rememberWindowSizeClass
 import com.nutomic.syncthingandroid.ui.nav.BACK_PEEK_PAD_DP
 import com.nutomic.syncthingandroid.ui.nav.backPopTransform
 import com.nutomic.syncthingandroid.ui.nav.backPredictivePopTransform
+import com.nutomic.syncthingandroid.ui.nav.sceneCrossFade
 import com.nutomic.syncthingandroid.util.isTelevision
 import kotlinx.serialization.Serializable
 
@@ -148,11 +142,6 @@ fun SettingsNavDisplay(
     // Scene changes on large screens are the detail pane appearing or disappearing;
     // cross-fading avoids sliding the whole list (and rendering it twice). Detail
     // switches themselves do not change the scene and are animated by the pane scaffold.
-    val listDetailSceneTransform: AnimatedContentTransitionScope<Scene<SettingsRoute>>.() -> ContentTransform = {
-        fadeIn(tween(220, easing = LinearEasing)) togetherWith
-                fadeOut(tween(90, easing = LinearEasing))
-    }
-
     NavDisplay(
         backStack = backStack,
         onBack = { navigator.navigateBack() },
@@ -172,7 +161,7 @@ fun SettingsNavDisplay(
         },
         transitionSpec = {
             if (useListDetail) {
-                listDetailSceneTransform()
+                sceneCrossFade()
             } else {
                 // Slide in from right when navigating forward
                 slideInHorizontally(initialOffsetX = { it }) togetherWith
@@ -180,10 +169,10 @@ fun SettingsNavDisplay(
             }
         },
         popTransitionSpec = {
-            if (useListDetail) listDetailSceneTransform() else backPopTransform()
+            if (useListDetail) sceneCrossFade() else backPopTransform()
         },
         predictivePopTransitionSpec = { swipeEdge ->
-            if (useListDetail) listDetailSceneTransform()
+            if (useListDetail) sceneCrossFade()
             else backPredictivePopTransform(swipeEdge, peekPadPx)
         },
         modifier = Modifier.onKeyEvent { keyEvent ->
