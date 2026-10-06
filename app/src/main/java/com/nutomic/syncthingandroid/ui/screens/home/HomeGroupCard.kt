@@ -1,124 +1,123 @@
 package com.nutomic.syncthingandroid.ui.screens.home
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.nutomic.syncthingandroid.ui.components.AppCard
+import com.nutomic.syncthingandroid.ui.theme.AMOLED_CARD_BORDER_ALPHA
+import com.nutomic.syncthingandroid.ui.theme.LocalAmoledTheme
 
 /**
- * An expanded card that has not been toggled in this composition must use its
- * natural body height so a newly composed LazyColumn item never participates
- * in layout at height zero.
+ * One slice of a visually continuous group card. Each slice is its own lazy
+ * item, so neither an expanded group nor a collapsed header loads hidden rows.
  */
-internal fun useNaturalBodyLayout(expanded: Boolean, seenUserToggle: Boolean): Boolean =
-    expanded && !seenUserToggle
+@Composable
+internal fun HomeGroupItemSurface(
+    first: Boolean,
+    last: Boolean,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val cardShape = MaterialTheme.shapes.medium
+    val square = CornerSize(0.dp)
+    val shape = cardShape.copy(
+        topStart = if (first) cardShape.topStart else square,
+        topEnd = if (first) cardShape.topEnd else square,
+        bottomStart = if (last) cardShape.bottomStart else square,
+        bottomEnd = if (last) cardShape.bottomEnd else square,
+    )
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = AMOLED_CARD_BORDER_ALPHA)
+    val amoled = LocalAmoledTheme.current
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = shape,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = if (first) 6.dp else 0.dp, bottom = if (last) 6.dp else 0.dp)
+            .drawWithCache {
+                val stroke = Stroke(1.dp.toPx())
+                // Extend the outline beyond interior edges, then clip it to
+                // this slice. Cache geometry so scrolling does not recreate it
+                // every frame, and avoid a border seam across each lazy row.
+                val extension = maxOf(
+                    cardShape.topStart.toPx(size, this), cardShape.topEnd.toPx(size, this),
+                    cardShape.bottomStart.toPx(size, this), cardShape.bottomEnd.toPx(size, this),
+                ) + stroke.width
+                val above = if (first) 0f else extension
+                val below = if (last) 0f else extension
+                val inset = stroke.width / 2
+                val outline = if (amoled) cardShape.createOutline(
+                    Size((size.width - stroke.width).coerceAtLeast(0f), (size.height + above + below - stroke.width).coerceAtLeast(0f)),
+                    layoutDirection, this,
+                ) else null
+                onDrawWithContent {
+                    drawContent()
+                    if (outline != null) {
+                        clipRect {
+                            translate(left = inset, top = inset - above) {
+                                drawOutline(outline, borderColor, style = stroke)
+                            }
+                        }
+                    }
+                }
+            },
+    ) {
+        Column(content = content)
+    }
+}
 
-/**
- * One group section of the home lists (folders AND devices): a single card
- * framing all members of the group. Tapping the header collapses or expands
- * the body.
- *
- * Performance: the body is ALWAYS composed and measured once at its natural
- * height; collapsing animates the height of a clipping window over that
- * preloaded content while a parallel fade keeps the body in a cached
- * hardware layer (alpha in (0,1)) for the duration of the animation. That
- * turns the per-frame work into cheap texture composites instead of
- * re-recording/re-rasterizing every row, which is what made the toggle
- * animation stutter before. The clipped-away content is removed from the
- * accessibility tree while collapsed.
- */
+/** Header only; expanded members are independent LazyColumn items. */
 @Composable
 internal fun HomeGroupCard(
     title: String,
     itemCount: Int,
     expanded: Boolean,
     onToggle: () -> Unit,
-    body: @Composable ColumnScope.() -> Unit,
 ) {
-    val density = LocalDensity.current
-    // Natural height of the always-composed body, retained while the item is
-    // composed and refreshed if the body content changes.
-    var fullBodyHeight by remember { mutableStateOf(0.dp) }
-    // Animations only run for user toggles; the first frame(s) after a cold
-    // start / config restore must snap to the stored state without animation.
-    var seenUserToggle by remember { mutableStateOf(false) }
-    val useNaturalHeight = useNaturalBodyLayout(expanded, seenUserToggle)
-    val rotation by animateFloatAsState(
+    val rotation = animateFloatAsState(
         targetValue = if (expanded) 0f else -90f,
         animationSpec = tween(200),
         label = "groupChevron",
     )
-    // While the body is fading (alpha in (0,1)) Android's renderer promotes
-    // the subtree to a cached hardware layer, so the height animation below
-    // composites a texture instead of re-recording/re-rasterizing every row
-    // on each frame. The height window and the fade run in parallel: the
-    // visual collapse/expand stays but per-frame cost collapses.
-    val bodyAlpha by animateFloatAsState(
-        targetValue = if (expanded) 1f else 0f,
-        animationSpec = tween(if (seenUserToggle) 260 else 0),
-        label = "groupBodyAlpha",
-    )
-    val bodyHeight by animateDpAsState(
-        targetValue = if (expanded) fullBodyHeight else 0.dp,
-        animationSpec = tween(if (seenUserToggle) 260 else 0),
-        label = "groupBodyHeight",
-    )
-    fun toggle() {
-        seenUserToggle = true
-        onToggle()
-    }
-    AppCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
+    HomeGroupItemSurface(first = true, last = !expanded || itemCount == 0) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = ::toggle)
-                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)
+                .clickable(onClick = onToggle)
+                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
         ) {
             Icon(
                 imageVector = Icons.Filled.ArrowDropDown,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .size(22.dp)
-                    .graphicsLayer { rotationZ = rotation }
+                modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = rotation.value },
             )
             Spacer(Modifier.width(8.dp))
             Text(
@@ -128,38 +127,14 @@ internal fun HomeGroupCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             if (itemCount > 1) {
                 Text(
                     text = "($itemCount)",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
-            }
-        }
-        // Before the first user toggle, an expanded body must be allowed to
-        // establish its natural height. After that, the fixed clipping window
-        // preserves the low-cost height animation used for toggles.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (useNaturalHeight) Modifier else Modifier.height(bodyHeight))
-                .clipToBounds()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .requiredHeightIn(max = Dp.Infinity)
-                    .onSizeChanged { size ->
-                        fullBodyHeight = with(density) { size.height.toDp() }
-                    }
-                    .then(if (expanded) Modifier else Modifier.clearAndSetSemantics {})
-                    // Fading alpha promotes this subtree to a cached hardware
-                    // layer for the duration of the animation (see above).
-                    .graphicsLayer { alpha = bodyAlpha }
-            ) {
-                body()
             }
         }
     }

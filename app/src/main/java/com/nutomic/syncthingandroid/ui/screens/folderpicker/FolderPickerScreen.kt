@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -52,6 +53,7 @@ import com.nutomic.syncthingandroid.util.isTelevision
 import java.io.File
 import java.util.TreeSet
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -101,6 +103,8 @@ fun FolderPickerScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var rootBrowse by rememberSaveable { mutableStateOf(false) }
     var rootAvailable by remember { mutableStateOf(false) }
+    var isCreating by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         val prefs = (context.applicationContext as SyncthingApp).preferences
@@ -111,7 +115,7 @@ fun FolderPickerScreen(
     }
 
     LaunchedEffect(rootDirectory) {
-        roots = populateRoots(context, rootDirectory)
+        roots = withContext(Dispatchers.IO) { populateRoots(context, rootDirectory) }
         if (!initialDirectory.isNullOrEmpty()) {
             location = File(initialDirectory)
         } else if (roots.size == 1) {
@@ -179,7 +183,7 @@ fun FolderPickerScreen(
                         ) {
                             Icon(Icons.Outlined.ArrowUpward, stringResource(R.string.folder_go_up))
                         }
-                        IconButton(onClick = { showCreateDialog = true }) {
+                        IconButton(enabled = !isCreating, onClick = { showCreateDialog = true }) {
                             Icon(Icons.Outlined.CreateNewFolder, stringResource(R.string.create_folder))
                         }
                         IconButton(onClick = {
@@ -265,18 +269,31 @@ fun FolderPickerScreen(
                 androidx.compose.material3.TextButton(onClick = {
                     showCreateDialog = false
                     val loc = location
-                    if (loc != null && name.isNotBlank()) {
-                        val created = if (rootBrowse) {
-                            RootAccess.code("mkdir ${shellQuote(File(loc, name.trim()).absolutePath)}") == 0
-                        } else {
-                            File(loc, name.trim()).mkdir()
-                        }
-                        if (created) {
-                            location = File(loc, name.trim())
-                        } else {
-                            android.widget.Toast.makeText(
-                                context, R.string.create_folder_failed, android.widget.Toast.LENGTH_SHORT
-                            ).show()
+                    if (loc != null && name.isNotBlank() && !isCreating) {
+                        val target = File(loc, name.trim())
+                        val useRoot = rootBrowse
+                        isCreating = true
+                        scope.launch {
+                            try {
+                                val created = withContext(Dispatchers.IO) {
+                                    if (useRoot) {
+                                        RootAccess.code("mkdir ${shellQuote(target.absolutePath)}") == 0
+                                    } else {
+                                        target.mkdir()
+                                    }
+                                }
+                                if (created) {
+                                    // Do not jump back if the user browsed elsewhere
+                                    // while the storage/root operation was running.
+                                    if (location == loc && rootBrowse == useRoot) location = target
+                                } else {
+                                    android.widget.Toast.makeText(
+                                        context, R.string.create_folder_failed, android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } finally {
+                                isCreating = false
+                            }
                         }
                     }
                 }) {

@@ -7,7 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
@@ -27,8 +27,10 @@ import kotlinx.coroutines.withContext
  * The lists are `null` while the first poll has not completed (loading state);
  * an empty list means the config really has no folders/devices.
  */
-val LocalHomeFolderModels = staticCompositionLocalOf<List<FolderUiModel>?> { null }
-val LocalHomeDeviceModels = staticCompositionLocalOf<List<DeviceUiModel>?> { null }
+// These values change frequently. Track readers instead of invalidating the
+// entire navigation subtree whenever a list's sync status changes.
+val LocalHomeFolderModels = compositionLocalOf<List<FolderUiModel>?> { null }
+val LocalHomeDeviceModels = compositionLocalOf<List<DeviceUiModel>?> { null }
 
 /**
  * Hosts the home screen folder/device polling loops.

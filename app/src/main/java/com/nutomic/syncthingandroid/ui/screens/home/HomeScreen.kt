@@ -31,7 +31,7 @@ import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListPrefetchScope
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.layout.NestedPrefetchScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -144,10 +144,8 @@ fun HomeScreen(
     val api = service?.api
     val apiConfigLoaded = api?.isConfigLoaded ?: false
 
-    // Folder/device lists are polled and owned by HomeDataHost (above the
-    // NavDisplay), so they survive entry transitions; see HomeDataHost.
-    val folders = LocalHomeFolderModels.current
-    val devices = LocalHomeDeviceModels.current
+    // List data is read inside its destination, not here: a sync-status tick
+    // must not invalidate the drawer, top bar, pager and other destinations.
     val isAmoled = LocalAmoledTheme.current
 
     val drawerState = rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
@@ -353,8 +351,6 @@ fun HomeScreen(
                         if (useNavigationRail) {
                             TabletHomeTabContent(
                                 selectedTab = selectedTab,
-                                folders = folders,
-                                devices = devices,
                                 serviceState = serviceState,
                                 selectedFolderId = selectedFolderId,
                                 selectedDeviceId = selectedDeviceId,
@@ -374,8 +370,6 @@ fun HomeScreen(
                             ) { page ->
                                 HomeTabPage(
                                     tab = page,
-                                    folders = folders,
-                                    devices = devices,
                                     serviceState = serviceState,
                                     selectedFolderId = selectedFolderId,
                                     selectedDeviceId = selectedDeviceId,
@@ -396,8 +390,6 @@ fun HomeScreen(
 @Composable
 private fun TabletHomeTabContent(
     selectedTab: Int,
-    folders: List<FolderUiModel>?,
-    devices: List<DeviceUiModel>?,
     serviceState: SyncthingService.State,
     selectedFolderId: String?,
     selectedDeviceId: String?,
@@ -424,8 +416,6 @@ private fun TabletHomeTabContent(
     ) { tab ->
         HomeTabPage(
             tab = tab,
-            folders = folders,
-            devices = devices,
             serviceState = serviceState,
             selectedFolderId = selectedFolderId,
             selectedDeviceId = selectedDeviceId,
@@ -439,8 +429,6 @@ private fun TabletHomeTabContent(
 @Composable
 private fun HomeTabPage(
     tab: Int,
-    folders: List<FolderUiModel>?,
-    devices: List<DeviceUiModel>?,
     serviceState: SyncthingService.State,
     selectedFolderId: String?,
     selectedDeviceId: String?,
@@ -450,12 +438,12 @@ private fun HomeTabPage(
 ) {
     when (tab) {
         TAB_FOLDERS -> FolderListPage(
-            folders = folders,
+            folders = LocalHomeFolderModels.current,
             selectedFolderId = selectedFolderId,
             listState = folderListState,
         )
         TAB_DEVICES -> DeviceListPage(
-            devices = devices,
+            devices = LocalHomeDeviceModels.current,
             selectedDeviceId = selectedDeviceId,
             listState = deviceListState,
         )
@@ -504,7 +492,7 @@ private fun HomeNavigationRail(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FolderListPage(
+internal fun FolderListPage(
     folders: List<FolderUiModel>?,
     selectedFolderId: String?,
     listState: LazyListState,
@@ -640,31 +628,36 @@ private fun FolderListPage(
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
     ) {
-        // One item per group: the whole section is a single card that expands
-        // or collapses inside itself. Adding/removing individual folder items
-        // on toggle (the old design) made the collapse janky, because every
-        // toggle rewrote the LazyColumn item set and forced a full reflow.
-        items(sections, key = { "group:" + it.groupName }) { section ->
-            HomeGroupCard(
-                title = if (section.groupName.isEmpty())
-                    stringResource(R.string.folder_group_ungrouped)
-                else section.groupName,
-                itemCount = section.items.size,
-                expanded = section.groupName !in collapsedGroups,
-                onToggle = { toggleGroup(section.groupName) },
-            ) {
-                GroupRowDivider()
-                section.items.forEachIndexed { index, model ->
-                    FolderRowContent(
-                        model = model,
-                        selected = model.id == selectedFolderId,
-                        onEdit = onEdit,
-                        onOverride = onOverride,
-                        onRevert = onRevert,
-                        onReauthorize = onReauthorize,
-                    )
-                    if (index < section.items.lastIndex) {
+        // Lazy-load individual rows, not entire groups. A large ungrouped
+        // section must not compose off-screen or collapsed folder rows.
+        sections.forEach { section ->
+            val expanded = section.groupName !in collapsedGroups
+            item(key = "group:" + section.groupName, contentType = "groupHeader") {
+                HomeGroupCard(
+                    title = if (section.groupName.isEmpty())
+                        stringResource(R.string.folder_group_ungrouped)
+                    else section.groupName,
+                    itemCount = section.items.size,
+                    expanded = expanded,
+                    onToggle = { toggleGroup(section.groupName) },
+                )
+            }
+            if (expanded) {
+                itemsIndexed(
+                    section.items,
+                    key = { _, model -> "folder:" + model.id },
+                    contentType = { _, _ -> "folderRow" },
+                ) { index, model ->
+                    HomeGroupItemSurface(first = false, last = index == section.items.lastIndex) {
                         GroupRowDivider()
+                        FolderRowContent(
+                            model = model,
+                            selected = model.id == selectedFolderId,
+                            onEdit = onEdit,
+                            onOverride = onOverride,
+                            onRevert = onRevert,
+                            onReauthorize = onReauthorize,
+                        )
                     }
                 }
             }
@@ -674,7 +667,7 @@ private fun FolderListPage(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DeviceListPage(
+internal fun DeviceListPage(
     devices: List<DeviceUiModel>?,
     selectedDeviceId: String?,
     listState: LazyListState,
@@ -728,24 +721,31 @@ private fun DeviceListPage(
         // Keep the last row reachable above the bottom-right FAB.
         contentPadding = PaddingValues(bottom = 96.dp)
     ) {
-        items(sections, key = { "dgroup:" + it.groupName }) { section ->
-            HomeGroupCard(
-                title = if (section.groupName.isEmpty())
-                    stringResource(R.string.folder_group_ungrouped)
-                else section.groupName,
-                itemCount = section.items.size,
-                expanded = section.groupName !in collapsedGroups,
-                onToggle = { toggleGroup(section.groupName) },
-            ) {
-                GroupRowDivider()
-                section.items.forEachIndexed { index, model ->
-                    DeviceRowContent(
-                        model = model,
-                        selected = model.id == selectedDeviceId,
-                        onEdit = onEdit,
-                    )
-                    if (index < section.items.lastIndex) {
+        sections.forEach { section ->
+            val expanded = section.groupName !in collapsedGroups
+            item(key = "dgroup:" + section.groupName, contentType = "groupHeader") {
+                HomeGroupCard(
+                    title = if (section.groupName.isEmpty())
+                        stringResource(R.string.folder_group_ungrouped)
+                    else section.groupName,
+                    itemCount = section.items.size,
+                    expanded = expanded,
+                    onToggle = { toggleGroup(section.groupName) },
+                )
+            }
+            if (expanded) {
+                itemsIndexed(
+                    section.items,
+                    key = { _, model -> "device:" + model.id },
+                    contentType = { _, _ -> "deviceRow" },
+                ) { index, model ->
+                    HomeGroupItemSurface(first = false, last = index == section.items.lastIndex) {
                         GroupRowDivider()
+                        DeviceRowContent(
+                            model = model,
+                            selected = model.id == selectedDeviceId,
+                            onEdit = onEdit,
+                        )
                     }
                 }
             }

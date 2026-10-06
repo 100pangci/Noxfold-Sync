@@ -57,12 +57,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -1082,13 +1084,41 @@ class RestApi(
      */
     fun getEvents(sinceId: Long, limit: Long, listener: OnReceiveEventListener) {
         val params = params("since" to sinceId.toString(), "limit" to limit.toString())
-        apiGet(ApiClient.URI_EVENTS, params, { result ->
-            val jsonEvents = jsonCodec.parseToJsonElement(result).jsonArray
-            var lastId: Long = 0
-
-            for (eventElement in jsonEvents) {
+        val targetUrl = url
+        restScope.launch {
+            val events = try {
+                val result = clientFor(targetUrl).get(ApiClient.URI_EVENTS, params)
+                // Parsing a large event batch is CPU work, not a UI operation.
+                // Only delivery/state mutation stays on the original restScope.
+                withContext(Dispatchers.Default) {
+                    val batch = jsonCodec.parseToJsonElement(result) as? JsonArray
+                        ?: throw SerializationException("Expected an event array")
+                    batch.mapNotNull { element ->
+                        try {
+                            jsonCodec.decodeFromJsonElement<Event>(element) to element
+                        } catch (ex: SerializationException) {
+                            Log.e(TAG, "getEvents: Skipping malformed event", ex)
+                            null
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                listener.onError()
+                return@launch
+            } catch (e: SerializationException) {
+                Log.e(TAG, "getEvents: Invalid event batch", e)
+                listener.onError()
+                return@launch
+            }
+            var lastId = 0L
+            for ((index, entry) in events.withIndex()) {
+                // Give input/frames a chance to run between chunks without
+                // changing event order or concurrently mutating cached state.
+                if (index % 16 == 0) yield()
+                val (event, eventElement) = entry
                 try {
-                    val event = jsonCodec.decodeFromJsonElement<Event>(eventElement)
                     if (lastId < event.id) {
                         lastId = event.id.toLong()
                     }
@@ -1099,9 +1129,7 @@ class RestApi(
             }
 
             listener.onDone(lastId)
-        }, {
-            listener.onError()
-        })
+        }
     }
 
     /**

@@ -281,6 +281,55 @@ class RestApiTest {
     // region Events: getEvents
 
     @Test
+    fun getEvents_largeBatchPreservesOrderAcrossDeliveryChunks() {
+        val ids = (1..65).toList()
+        val body = ids.joinToString(prefix = "[", postfix = "]") {
+            """{"id": $it, "type": "Ping", "data": {}}"""
+        }
+        dispatcher.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body))
+        val received = java.util.Collections.synchronizedList(ArrayList<Int>())
+        val done = CountDownLatch(1)
+        var lastId = 0L
+        restApi.getEvents(0, 0, object : RestApi.OnReceiveEventListener {
+            override fun onError() = throw AssertionError("unexpected onError")
+            override fun onEvent(event: com.nutomic.syncthingandroid.model.Event,
+                                 json: kotlinx.serialization.json.JsonElement) {
+                received.add(event.id)
+            }
+            override fun onDone(lastId_: Long) {
+                lastId = lastId_
+                done.countDown()
+            }
+        })
+        assertTrue("large batch did not finish", done.await(10, TimeUnit.SECONDS))
+        assertEquals(ids, received)
+        assertEquals(65L, lastId)
+    }
+
+    @Test
+    fun getEvents_skipsMalformedEntryWithoutDroppingValidEvents() {
+        dispatcher.enqueue(MockResponse().setHeader("Content-Type", "application/json")
+            .setBody("""[{"id": 1, "type": "Ping"}, {"id": "invalid"}, {"id": 3, "type": "Ping"}]"""))
+        val received = java.util.Collections.synchronizedList(ArrayList<Int>())
+        val done = CountDownLatch(1)
+        var lastId = 0L
+        restApi.getEvents(0, 0, object : RestApi.OnReceiveEventListener {
+            override fun onError() = throw AssertionError("unexpected onError")
+            override fun onEvent(event: com.nutomic.syncthingandroid.model.Event,
+                                 json: kotlinx.serialization.json.JsonElement) {
+                received.add(event.id)
+            }
+            override fun onDone(lastId_: Long) {
+                lastId = lastId_
+                done.countDown()
+            }
+        })
+        assertTrue("batch did not finish", done.await(10, TimeUnit.SECONDS))
+        assertEquals(listOf(1, 3), received)
+        assertEquals(3L, lastId)
+    }
+
+    @Test
     fun getEvents_dispatchesEvents_andReportsLastId() {
         val eventsJson = """
             [
