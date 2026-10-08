@@ -9,16 +9,16 @@ v2.1.6.0-rc.1 — Pre-release for testing; this is not the final stable release.
 ## Sync and data safety
 * **SAF bridge reconciliation** now combines change hints, incremental scans, and periodic full scans. Verified snapshots and content hashes help prevent stale state or failed operations from deleting or overwriting user data.
 * Bridge copies are staged and verified before replacement; concurrent changes are protected, and failed merge operations remain retryable.
-* Folder creation/removal waits for Syncthing configuration acknowledgement. New-folder ignore rules are applied before syncing starts; marker-creation failures are reported.
+* Folder creation/removal waits for Syncthing configuration acknowledgement. New-folder ignore rules are applied before syncing starts; marker creation now reports failures and avoids duplicate marker files.
 * Config and ignore-list files are replaced transactionally. Backup import/export validates archives and config before installation; failed imports roll back config, database, and preferences, while failed exports preserve the previous archive.
 
 ## Responsiveness and size
-* Home folder/device groups lazy-load their rows, reducing work on large lists and avoiding scroll jumps. Event parsing and folder-picker filesystem work are moved off the UI thread.
+* Home folder/device groups lazy-load their rows, reducing work on large lists and avoiding scroll jumps. Routine sync-state updates are isolated from inactive home destinations; event parsing and folder-picker filesystem work are moved off the UI thread.
 * Release APKs use R8/resource shrinking and stripped native symbols: arm64 is about 31 MB → 16 MB; universal is about 65 MB → 50 MB.
 
 ## Compatibility and internals
 * Minimum Android version is now **Android 8.0 (API 26)**; Android 6 and 7 are no longer supported.
-* REST/model JSON now uses kotlinx.serialization; run-condition events use an in-process Flow bus, and service/event work uses structured coroutines with serialized shutdown handling.
+* REST/model JSON now uses kotlinx.serialization; run-condition events use an in-process Flow bus, and service/event work uses structured coroutines with serialized shutdown handling. Legacy asynchronous query/handler code was removed.
 
 ---
 
@@ -33,13 +33,13 @@ v2.1.6.0-rc.1 — 测试预览版，尚非正式稳定版。
 ## 同步与数据安全
 * **重做 SAF 桥接协调**：结合变更提示、增量扫描和周期性全量扫描；通过已验证快照及必要时的内容哈希，降低陈旧状态或失败操作误删、覆盖用户文件的风险。
 * 桥接复制先暂存、校验再替换；保护并发修改，合并失败的操作会保留以便重试。
-* 新建/删除文件夹前等待 Syncthing 确认配置；新文件夹先应用忽略规则再开始同步；标记文件创建失败会明确提示。
+* 新建/删除文件夹前等待 Syncthing 确认配置；新文件夹先应用忽略规则再开始同步；标记文件创建失败会明确提示，并避免重复生成标记文件。
 * config 与忽略列表采用事务式替换。备份导入/导出先校验归档和配置；导入失败回滚配置、数据库和偏好设置，导出失败保留旧备份。
 
 ## 响应速度与安装包
-* 主页文件夹/设备分组按需加载行，减少大列表开销并修复滚动跳动；事件解析和文件夹选择器的文件系统操作移出 UI 线程。
+* 主页文件夹/设备分组按需加载行，减少大列表开销并修复滚动跳动；常规同步状态更新不会让非当前主页页面重复刷新；事件解析和文件夹选择器的文件系统操作移出 UI 线程。
 * Release APK 启用 R8/资源压缩并剥离原生符号：arm64 约从 31 MB 降到 16 MB，universal 约从 65 MB 降到 50 MB。
 
 ## 兼容性与内部改造
 * 最低系统版本提高到 **Android 8.0（API 26）**；不再支持 Android 6 和 7。
-* REST/模型 JSON 改用 kotlinx.serialization；运行条件事件改用进程内 Flow 总线；服务与事件处理改用结构化协程，并串行化关停流程。
+* REST/模型 JSON 改用 kotlinx.serialization；运行条件事件改用进程内 Flow 总线；服务与事件处理改用结构化协程，并串行化关停流程；移除了遗留异步查询/Handler 代码。
