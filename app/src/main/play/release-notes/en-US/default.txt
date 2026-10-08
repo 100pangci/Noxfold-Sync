@@ -1,39 +1,17 @@
-v2.1.5.1: folder/device grouping on the home screen, a SAF re-authorization card, plus stability fixes for root mode and the SAF bridge.
-
-## New
-* **Folder / device grouping**: pick or create a group in the folder/device editor (dropdown + "new group"); the home screen shows one large collapsible card per group with the collapse state remembered, ungrouped items pinned on top
-* **SAF re-authorization card**: folders whose storage access is missing show an amber notice row; tapping re-opens the folder picker and re-authorizes in place (path unchanged) — syncing resumes automatically once granted
+v2.1.6.0-rc.1: SAF synchronization and configuration backup reliability improvements. Pre-release for testing; not the final stable release.
 
 ## Fixes
-* **Root mode**: storage handed back from a root session is now also relabeled via restorecon — fixes the app/core being unable to read their own config and key files in su environments that leave root-daemon SELinux types behind
-* **SAF bridge**: stale snapshots can no longer wipe forwarded folders
-* **Dialog**: anonymous usage-report text now sits in a small scrollable block
-* **i18n**: complete Slovak plural 'many' forms; declare az/be/ckb/gl in the locale list; escape apostrophes in fr/it group strings; folder/device group, SAF-card and Syncthing Camera strings completed across all locales (zh-CN/zh-TW restored)
-
-## Notes
-* Build: the prerequisite tools directory is only created when compiling the Go core from source
-
-## Known limitations
-* Root mode: verified on a Magisk / HyperOS device (incl. force-stop recovery); KernelSU untested
-* Implicit broadcasts to AppConfigReceiver are blocked by Android 16 / HyperOS — use explicit broadcasts (see wiki)
+* **SAF bridge**: stage and verify copied files before replacement, protect concurrent changes, and retry failed merge operations without advancing an unverified snapshot
+* **Folder setup/removal**: wait for Syncthing to accept configuration and ignore rules before continuing; report failures instead of starting an incomplete sync
+* **Config backups**: validate exports and imports before installation, preserve the previous backup, and roll back config, database, and preferences if an import fails
+* **Config files**: replace config and ignore-list files transactionally to avoid leaving partial files after a write failure
 
 ---
 
-v2.1.5.1：主页文件夹/设备分组、SAF 重新授权提示卡片，以及 Root 模式与 SAF 桥的稳定性修复。
+v2.1.6.0-rc.1：改进 SAF 同步桥和配置备份的可靠性。本版本为测试预览版，尚非正式稳定版。
 
-## 新增
-* **文件夹 / 设备分组**：编辑页为文件夹/设备选择或新建分组（下拉框 + 加号）；主页每个分组一张大卡片，点组头折叠/展开且状态记忆，未分组条目置顶
-* **SAF 重新授权提示卡片**：存储权限失效的文件夹显示琥珀色提示行，点击直接重开文件夹选择器原位重新授权（路径不变），授权后自动恢复同步
-
-## 修复
-* **Root 模式**：root 会话归还存储时顺带 restorecon 还原 SELinux 上下文——修复部分 su 环境（root 守护进程策略留下 SELinux 类型转换）下应用/核心读不了自己配置与密钥文件的问题（已验证强杀后冷启动自愈）
-* **SAF 桥**：陈旧快照不再误清已转发的文件夹
-* **对话框**：匿名使用统计说明文字改为小块可滚动区域
-* **i18n**：补全斯洛伐克语复数 many 形式；语言列表声明 az/be/ckb/gl；修复 fr/it 分组字符串撇号转义；文件夹/设备分组、SAF 卡片与 Syncthing Camera 字符串全语言补齐（zh-CN/zh-TW 已恢复）
-
-## 说明
-* 构建：仅在从源码编译 Go 核心时才创建工具目录
-
-## 已知限制
-* Root 模式：已在 Magisk / HyperOS 设备验证（含强杀恢复场景）；KernelSU 未测试
-* Android 16/HyperOS 拦截 AppConfigReceiver 隐式广播，请用显式广播（见 wiki）
+## 修复与改进
+* **SAF 同步桥**：复制完成并校验后再替换目标，避免覆盖并发修改；合并失败时保留未确认状态并重试
+* **文件夹配置**：等待 Syncthing 确认配置和忽略规则后再继续；失败时明确提示，不启动不完整的同步
+* **配置备份**：导入/导出先校验再安装；导出失败保留旧备份，导入失败时回滚配置、数据库和偏好设置
+* **配置文件**：事务式替换 config 与忽略列表，减少写入失败造成部分文件的风险

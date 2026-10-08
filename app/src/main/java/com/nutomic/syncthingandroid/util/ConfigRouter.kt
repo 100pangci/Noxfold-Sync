@@ -9,6 +9,9 @@ import com.nutomic.syncthingandroid.model.FolderIgnoreList
 import com.nutomic.syncthingandroid.model.Gui
 import com.nutomic.syncthingandroid.model.Options
 import com.nutomic.syncthingandroid.service.RestApi
+import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Provides a transparent access to the config if ...
@@ -64,6 +67,36 @@ class ConfigRouter(context: Context) {
         restApi.addFolder(folder)       // This will send the config afterwards.
     }
 
+    /** Adds a folder and waits for either the REST acknowledgement or durable config write. */
+    suspend fun addFolderAndWait(restApi: RestApi?, folder: Folder) {
+        if (restApi != null && restApi.isConfigLoaded) {
+            restApi.addFolderAndWait(folder)
+            return
+        }
+        withContext(Dispatchers.IO) {
+            synchronized(this@ConfigRouter) {
+                configXml.loadConfig()
+                configXml.addFolder(folder)
+                if (!configXml.saveChanges()) throw IOException("Could not save folder config")
+            }
+        }
+    }
+
+    /** Replaces a folder and waits for durable completion. */
+    suspend fun updateFolderAndWait(restApi: RestApi?, folder: Folder) {
+        if (restApi != null && restApi.isConfigLoaded) {
+            restApi.updateFolderAndWait(folder)
+            return
+        }
+        withContext(Dispatchers.IO) {
+            synchronized(this@ConfigRouter) {
+                configXml.loadConfig()
+                configXml.updateFolder(folder)
+                if (!configXml.saveChanges()) throw IOException("Could not save folder config")
+            }
+        }
+    }
+
     @Synchronized
     fun ignoreFolder(restApi: RestApi?,
                             deviceId: String?,
@@ -116,6 +149,24 @@ class ConfigRouter(context: Context) {
     }
 
     /**
+     * Removes a folder only after the live config has been acknowledged/persisted. Callers
+     * should perform destructive bridge cleanup only after this method returns successfully.
+     */
+    suspend fun removeFolderAndWait(restApi: RestApi?, folderId: String) {
+        if (restApi != null && restApi.isConfigLoaded) {
+            restApi.removeFolderAndWait(folderId)
+            return
+        }
+        withContext(Dispatchers.IO) {
+            synchronized(this@ConfigRouter) {
+                configXml.loadConfig()
+                configXml.removeFolder(folderId)
+                if (!configXml.saveChanges()) throw IOException("Could not save folder removal")
+            }
+        }
+    }
+
+    /**
      * Gets ignore list for given folder.
      */
     @Synchronized
@@ -145,6 +196,20 @@ class ConfigRouter(context: Context) {
 
         // Syncthing is running and REST API is available.
         restApi.postFolderIgnoreList(folder.id, ignore)
+    }
+
+    /** Saves ignore rules before a new folder is allowed to scan/sync. */
+    suspend fun postFolderIgnoreListAndWait(restApi: RestApi?, folder: Folder, ignore: Array<String>) {
+        if (restApi != null && restApi.isConfigLoaded) {
+            restApi.postFolderIgnoreListAndWait(folder.id, ignore)
+            return
+        }
+        val saved = withContext(Dispatchers.IO) {
+            synchronized(this@ConfigRouter) {
+                configXml.postFolderIgnoreList(folder, ignore)
+            }
+        }
+        if (!saved) throw IOException("Could not save folder ignore rules")
     }
 
     @Synchronized

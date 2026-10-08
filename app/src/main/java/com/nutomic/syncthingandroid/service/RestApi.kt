@@ -757,6 +757,52 @@ class RestApi(
         }
     }
 
+    /** Adds/replaces a folder and waits until Syncthing accepts the new config. */
+    suspend fun addFolderAndWait(folder: Folder) {
+        val updated = copyConfigForEdit()
+        val folders = updated.folders ?: throw IOException("Syncthing config has no folder list")
+        folders.removeAll { it.id == folder.id }
+        folders.add(deepCopy(folder))
+        postConfigAndWait(updated)
+    }
+
+    /** Replaces a folder and waits until Syncthing accepts the new config. */
+    suspend fun updateFolderAndWait(folder: Folder) {
+        addFolderAndWait(folder)
+    }
+
+    /**
+     * Removes a folder only after the core has acknowledged the config. The in-memory config
+     * remains unchanged on REST failure, allowing the UI to keep the bridge and its data.
+     */
+    suspend fun removeFolderAndWait(id: String) {
+        val updated = copyConfigForEdit()
+        val folders = updated.folders ?: throw IOException("Syncthing config has no folder list")
+        folders.removeAll { it.id == id }
+        postConfigAndWait(updated)
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .remove(ShareActivity.PREF_FOLDER_SAVED_SUBDIRECTORY + id)
+            .apply()
+    }
+
+    private fun copyConfigForEdit(): Config = synchronized(configLock) {
+        val current = config ?: throw IOException("Syncthing config is not loaded")
+        deepCopy(current)
+    }
+
+    private suspend fun postConfigAndWait(updated: Config) {
+        val currentUrl = url
+        clientFor(currentUrl).post(
+            ApiClient.URI_SYSTEM_CONFIG,
+            body = jsonCodec.encodeToString(updated),
+        )
+        synchronized(configLock) {
+            config = updated
+            url = webGuiUrl
+        }
+        onConfigChangedListener.onConfigChanged()
+    }
+
     fun updateFolder(newFolder: Folder) {
         synchronized(configLock) {
             removeFolderInternal(newFolder.id)
@@ -982,6 +1028,16 @@ class RestApi(
         folderIgnoreList.ignore = ignore
         apiPost(ApiClient.URI_DB_IGNORES, params("folder" to folderId),
             jsonCodec.encodeToString(folderIgnoreList))
+    }
+
+    /** Posts ignore rules and returns only after the REST endpoint accepts them. */
+    suspend fun postFolderIgnoreListAndWait(folderId: String, ignore: Array<String>) {
+        val folderIgnoreList = FolderIgnoreList().apply { this.ignore = ignore }
+        clientFor(url).post(
+            ApiClient.URI_DB_IGNORES,
+            params("folder" to folderId),
+            jsonCodec.encodeToString(folderIgnoreList),
+        )
     }
 
     /**

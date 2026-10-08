@@ -779,6 +779,7 @@
     <!-- Menu item to select the current folder -->
 
     <string name="create_folder_failed">Failed to create folder</string>
+    <string name="folder_delete_failed">Failed to remove folder. The bridge data was kept; see the log for details.</string>
 
     <!-- Menu item to go up to parent folder -->
     <string name="folder_go_up">Go up</string>

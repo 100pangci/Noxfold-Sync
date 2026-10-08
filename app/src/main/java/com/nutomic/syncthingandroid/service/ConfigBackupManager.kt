@@ -6,7 +6,6 @@ import android.util.Log
 
 import com.nutomic.syncthingandroid.service.SyncthingService.State
 import com.nutomic.syncthingandroid.util.ConfigXml
-import com.nutomic.syncthingandroid.util.FileUtils
 
 import java.io.File
 import java.io.FileInputStream
@@ -14,9 +13,10 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
+import java.util.UUID
+import javax.xml.parsers.DocumentBuilderFactory
 
 import net.lingala.zip4j.ZipFile
-import net.lingala.zip4j.exception.ZipException
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.CompressionLevel
@@ -37,99 +37,104 @@ class ConfigBackupManager(private val service: SyncthingService,
      * Exports the local config and keys to the backup zip file.
      */
     fun exportConfig(): Boolean {
-        var failSuccess = true
         Log.d(TAG, "exportConfig BEGIN")
-
-        if (service.currentState != State.DISABLED) {
-            // Synchronous shutdown on this background thread: the backup must only read
-            // files after the binary has fully exited.
-            service.shutdownToStateBlocking(State.DISABLED)
-        }
-
-        // Create export dir if non-existant.
         val targetZip = backupZipFile
-        targetZip.parentFile?.mkdirs()
-
-        // Export SharedPreferences.
-        var sharedPreferencesFile: File? = null
+        val password = preferences.getString(Constants.PREF_BACKUP_PASSWORD, "") ?: ""
+        var success = false
         try {
-            val prefsFile = Constants.getSharedPrefsFile(service)
-            FileOutputStream(prefsFile).use { fileOutputStream ->
-                ObjectOutputStream(fileOutputStream).use { objectOutputStream ->
-                    objectOutputStream.writeObject(preferences.all)
-                    objectOutputStream.flush()
-                }
-                fileOutputStream.flush()
-            }
-            sharedPreferencesFile = prefsFile
-        } catch (e: IOException) {
-            Log.e(TAG, "exportConfig: Failed to export SharedPreferences #1", e)
-            failSuccess = false
-        }
-
-        // Make a list of files to backup.
-        val includePaths = listOf(
-            Constants.getConfigFile(service),
-
-            Constants.getPrivateKeyFile(service),
-            Constants.getPublicKeyFile(service),
-
-            Constants.getHttpsCertFile(service),
-            Constants.getHttpsKeyFile(service),
-
-            Constants.getSharedPrefsFile(service),
-
-            Constants.getIndexDbFolder(service)
-        )
-
-        // If user set one, apply a password and encrypt the zip file.
-        val zipEncryptionPassword = preferences.getString(Constants.PREF_BACKUP_PASSWORD, "") ?: ""
-
-        // Compress files to zip file.
-        try {
-            // Delete existing ZIP file to ensure we create a fresh archive instead of appending
-            if (targetZip.exists()) {
-                targetZip.delete()
+            if (service.currentState != State.DISABLED) {
+                // Read a consistent view after the native process has exited.
+                service.shutdownToStateBlocking(State.DISABLED)
             }
 
-            val parameters = ZipParameters()
-            parameters.compressionMethod = CompressionMethod.DEFLATE
-            parameters.compressionLevel = CompressionLevel.NORMAL
+            success = ConfigBackupTransactions.writeValidatedAtomically(
+                target = targetZip,
+                write = { stagedZip ->
+                    val workDir = File(service.cacheDir, "config-export-${UUID.randomUUID()}")
+                    if (!workDir.mkdirs()) throw IOException("Could not create export staging directory")
+                    try {
+                        val prefsFile = File(workDir, Constants.SHARED_PREFS_FILE)
+                        FileOutputStream(prefsFile).use { fileOutputStream ->
+                            ObjectOutputStream(fileOutputStream).use { objectOutputStream ->
+                                objectOutputStream.writeObject(preferences.all)
+                                objectOutputStream.flush()
+                            }
+                            fileOutputStream.flush()
+                            fileOutputStream.fd.sync()
+                        }
 
-            val zipFile: ZipFile
-            if (zipEncryptionPassword.isEmpty()) {
-                zipFile = ZipFile(targetZip)
-                parameters.isEncryptFiles = false
-            } else {
-                zipFile = ZipFile(targetZip, zipEncryptionPassword.toCharArray())
-                parameters.isEncryptFiles = true
-                parameters.encryptionMethod = EncryptionMethod.AES
-                parameters.aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256
-            }
+                        val includePaths = listOf(
+                            Constants.getConfigFile(service),
+                            Constants.getPrivateKeyFile(service),
+                            Constants.getPublicKeyFile(service),
+                            Constants.getHttpsCertFile(service),
+                            Constants.getHttpsKeyFile(service),
+                        )
+                        includePaths.forEach { file ->
+                            if (!file.isFile || file.length() == 0L) {
+                                throw IOException("Required export file is missing or empty: ${file.name}")
+                            }
+                        }
 
-            // Add files.
-            for (includePath in includePaths) {
-                if (includePath.exists()) {
-                    if (includePath.isFile) {
-                        zipFile.addFile(includePath, parameters)
-                    } else if (includePath.isDirectory) {
-                        zipFile.addFolder(includePath, parameters)
+                        val zip = if (password.isEmpty()) {
+                            ZipFile(stagedZip)
+                        } else {
+                            ZipFile(stagedZip, password.toCharArray())
+                        }
+                        val parameters = ZipParameters().apply {
+                            compressionMethod = CompressionMethod.DEFLATE
+                            compressionLevel = CompressionLevel.NORMAL
+                            if (password.isNotEmpty()) {
+                                isEncryptFiles = true
+                                encryptionMethod = EncryptionMethod.AES
+                                aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256
+                            } else {
+                                isEncryptFiles = false
+                            }
+                        }
+                        includePaths.forEach { zip.addFile(it, parameters) }
+                        zip.addFile(prefsFile, parameters)
+                        val database = Constants.getIndexDbFolder(service)
+                        if (database.isDirectory) zip.addFolder(database, parameters)
+                    } finally {
+                        workDir.deleteRecursively()
+                    }
+                },
+                validate = { stagedZip ->
+                    val zip = if (password.isEmpty()) {
+                        ZipFile(stagedZip)
+                    } else {
+                        ZipFile(stagedZip, password.toCharArray())
+                    }
+                    REQUIRED_BACKUP_FILES.forEach { name ->
+                        if (zip.getFileHeader(name) == null) {
+                            throw IOException("Generated backup is missing $name")
+                        }
+                    }
+                    val validationDir = File(service.cacheDir, "config-export-check-${UUID.randomUUID()}")
+                    try {
+                        zip.extractAll(validationDir.absolutePath)
+                        REQUIRED_BACKUP_FILES.forEach { name ->
+                            val extracted = File(validationDir, name)
+                            if (!extracted.isFile || extracted.length() == 0L) {
+                                throw IOException("Generated backup failed validation for $name")
+                            }
+                        }
+                        validateConfigXml(File(validationDir, Constants.CONFIG_FILE))
+                    } finally {
+                        validationDir.deleteRecursively()
                     }
                 }
-            }
-
-            if (sharedPreferencesFile != null && sharedPreferencesFile.exists()) {
-                sharedPreferencesFile.delete()
-            }
+            )
         } catch (e: Exception) {
             Log.w(TAG, "exportConfig: Failed to export config", e)
-            failSuccess = false
+            success = false
+        } finally {
+            // Start Syncthing after export if run conditions apply, on success or failure.
+            restartIfRunConditionsApply()
         }
         Log.d(TAG, "exportConfig END")
-
-        // Start syncthing after export if run conditions apply.
-        restartIfRunConditionsApply()
-        return failSuccess
+        return success
     }
 
     /**
@@ -139,124 +144,117 @@ class ConfigBackupManager(private val service: SyncthingService,
      */
     fun importConfig(): Boolean {
         Log.d(TAG, "importConfig PRECHECK")
-
-        // Check if ZIP exists.
         val zipFilePath = backupZipFile
-        if (!zipFilePath.exists()) {
-            Log.e(TAG, "importConfig: ZIP file is missing. Please check if it is present at '" + zipFilePath.absolutePath + "' as specified in the settings screen.")
+        if (!zipFilePath.isFile) {
+            Log.e(TAG, "importConfig: ZIP file is missing: ${zipFilePath.absolutePath}")
             return false
         }
 
-        // Open ZIP file.
-        val zipFile: ZipFile
+        val importDir = File(service.filesDir, ".config-import-${UUID.randomUUID()}")
+        val extracted = File(importDir, "extracted")
+        var bridgesWereStarted: Boolean? = null
+        var success = false
+        var rollbackComplete = true
+        var bridgesReady = true
+        var preferenceCommitAttempted = false
+        val oldPreferences = snapshotPreferences(preferences.all)
         try {
-            // If user set one, get password to decrypt the zip file.
-            val zipEncryptionPassword = preferences.getString(Constants.PREF_BACKUP_PASSWORD, "") ?: ""
-            if (zipEncryptionPassword.isEmpty()) {
-                zipFile = ZipFile(zipFilePath)
-            } else {
-                val encryptedZipFile = ZipFile(zipFilePath, zipEncryptionPassword.toCharArray())
-                if (!encryptedZipFile.isEncrypted) {
-                    Log.e(TAG, "importConfig: ZIP file is not encrypted, but password was specified in settings screen. Try to specify an empty password temporarily.")
-                    return false
-                }
-                zipFile = encryptedZipFile
+            if (!extracted.mkdirs()) throw IOException("Could not create import staging directory")
+            val password = preferences.getString(Constants.PREF_BACKUP_PASSWORD, "") ?: ""
+            val zipFile = openZip(zipFilePath, password)
+            validateZipEntryNames(zipFile)
+            REQUIRED_BACKUP_FILES.forEach { name ->
+                if (zipFile.getFileHeader(name) == null) throw IOException("Required file missing from ZIP: $name")
             }
+            zipFile.extractAll(extracted.absolutePath)
+            ensureExtractedTreeIsContained(extracted)
+            validateExtractedImport(extracted)
 
-            // Check if ZIP archive contains required files.
-            val checkFiles = listOf(
-                Constants.CONFIG_FILE,
-
-                Constants.PRIVATE_KEY_FILE,
-                Constants.PUBLIC_KEY_FILE
+            val importedPreferences = readImportedPreferences(
+                File(extracted, Constants.SHARED_PREFS_FILE),
+                preferences.getString(Constants.PREF_BACKUP_REL_PATH_TO_ZIP, DEFAULT_BACKUP_REL_PATH)
+                    ?: DEFAULT_BACKUP_REL_PATH,
+                preferences.getString(Constants.PREF_BACKUP_PASSWORD, "") ?: "",
             )
-            for (checkFile in checkFiles) {
-                if (zipFile.getFileHeader(checkFile) == null) {
-                    Log.e(TAG, "importConfig: Required file not found inside zip [$checkFile]")
-                    return false
-                }
-            }
 
-            // Test if supplied encryption password is correct.
-            val cacheDir = service.cacheDir.absolutePath
-            zipFile.extractFile(Constants.PUBLIC_KEY_FILE, cacheDir)
-            File(cacheDir, Constants.PUBLIC_KEY_FILE).delete()
-        } catch (e: ZipException) {
-            Log.e(TAG, "importConfig: Failed to open zip, " + e.message)
-            return false
-        }
-
-        // Shutdown SyncthingNative.
-        var failSuccess = true
-        Log.d(TAG, "importConfig BEGIN")
-        val safBridgesWereStarted = service.pauseSafBridgesForConfigImport()
-        try {
+            Log.d(TAG, "importConfig BEGIN")
+            bridgesWereStarted = service.pauseSafBridgesForConfigImport()
             if (service.currentState != State.DISABLED) {
-                // Synchronous shutdown on this background thread: the backup must only read
-                // files after the binary has fully exited.
                 service.shutdownToStateBlocking(State.DISABLED)
             }
 
-            // Remove database folder if it exists.
-            val databasePath = Constants.getIndexDbFolder(service)
-            if (databasePath.exists()) {
-                Log.d(TAG, "importConfig: Clearing index database")
-                try {
-                    FileUtils.deleteDirectoryRecursively(databasePath)
-                } catch (e: IOException) {
-                    Log.e(TAG, "Failed to delete directory '" + databasePath.absolutePath + "'" + e)
-                }
-            }
-
-            // Decompress zip file.
-            try {
-                zipFile.extractAll(service.filesDir.absolutePath)
-            } catch (e: ZipException) {
-                Log.e(TAG, "importConfig: Failed to extract zip, " + e.message)
-                failSuccess = false
-            }
-
-            // Check if necessary files are present after extraction.
-            val checkPaths = listOf(
-                Constants.getConfigFile(service),
-
-                Constants.getPrivateKeyFile(service),
-                Constants.getPublicKeyFile(service),
-
-                Constants.getHttpsCertFile(service),
-                Constants.getHttpsKeyFile(service),
-
-                Constants.getSharedPrefsFile(service)
+            val databaseStaged = File(extracted, INDEX_DB_FOLDER)
+                .takeIf { it.isDirectory }
+            val replacements = listOf(
+                ConfigBackupTransactions.Replacement(File(extracted, Constants.CONFIG_FILE), Constants.getConfigFile(service)),
+                ConfigBackupTransactions.Replacement(File(extracted, Constants.PRIVATE_KEY_FILE), Constants.getPrivateKeyFile(service)),
+                ConfigBackupTransactions.Replacement(File(extracted, Constants.PUBLIC_KEY_FILE), Constants.getPublicKeyFile(service)),
+                ConfigBackupTransactions.Replacement(File(extracted, Constants.HTTPS_CERT_FILE), Constants.getHttpsCertFile(service)),
+                ConfigBackupTransactions.Replacement(File(extracted, Constants.HTTPS_KEY_FILE), Constants.getHttpsKeyFile(service)),
+                ConfigBackupTransactions.Replacement(databaseStaged, Constants.getIndexDbFolder(service)),
             )
-            for (checkPath in checkPaths) {
-                if (!checkPath.exists()) {
-                    Log.e(TAG, "importConfig: Missing file after extraction [" + checkPath.name + "]")
-                    failSuccess = false
-                }
+            success = ConfigBackupTransactions.replaceAll(
+                replacements = replacements,
+                backupDir = File(importDir, "previous"),
+                commit = {
+                    preferenceCommitAttempted = true
+                    if (applyPreferences(importedPreferences)) {
+                        true
+                    } else {
+                        if (!restorePreferences(oldPreferences)) rollbackComplete = false
+                        false
+                    }
+                },
+                onRollbackFailure = { rollbackComplete = false },
+            )
+            if (!success && preferenceCommitAttempted) {
+                if (!restorePreferences(oldPreferences)) rollbackComplete = false
             }
-
-            // Import shared preferences.
-            val sharedPreferencesFile = Constants.getSharedPrefsFile(service)
-            if (sharedPreferencesFile.exists()) {
-                Log.d(TAG, "importConfig: Importing shared preferences")
-                failSuccess = failSuccess && importConfigSharedPrefs(sharedPreferencesFile)
-                sharedPreferencesFile.delete()
+        } catch (e: Exception) {
+            Log.e(TAG, "importConfig: Staging or applying backup failed", e)
+            if (preferenceCommitAttempted && !restorePreferences(oldPreferences)) {
+                rollbackComplete = false
             }
         } finally {
-            // The imported mappings and snapshots are now on disk, or the import failed. In
-            // either case no pre-import observer/tree may remain active.
-            service.resumeSafBridgesAfterConfigImport(safBridgesWereStarted)
+            // Resume from the final on-disk/preferences state: committed import on success,
+            // restored old configuration after a rolled-back failure.
+            if (rollbackComplete) {
+                bridgesWereStarted?.let {
+                    try {
+                        service.resumeSafBridgesAfterConfigImport(it)
+                    } catch (e: Exception) {
+                        bridgesReady = false
+                        Log.e(TAG, "importConfig: Failed to resume bridges from final import state", e)
+                    }
+                }
+            } else {
+                Log.e(TAG, "importConfig: Rollback incomplete; leaving bridges/core stopped to protect data")
+            }
+            val previousFiles = File(importDir, "previous")
+            val mustKeepRollbackFiles = previousFiles.exists() &&
+                previousFiles.list()?.isNotEmpty() != false
+            extracted.deleteRecursively()
+            if (mustKeepRollbackFiles) {
+                Log.e(TAG, "importConfig: Preserving rollback files in ${previousFiles.absolutePath}")
+            } else {
+                importDir.deleteRecursively()
+            }
+            if (success) {
+                try {
+                    cleanupImportedFolderDatabases()
+                } catch (e: Exception) {
+                    Log.e(TAG, "importConfig: Failed to cleanup invalid folder databases", e)
+                }
+            }
+            if (rollbackComplete && bridgesReady && bridgesWereStarted != null) {
+                try {
+                    restartIfRunConditionsApply()
+                } catch (e: Exception) {
+                    Log.e(TAG, "importConfig: Failed to restart core from final import state", e)
+                }
+            }
         }
-
-        try {
-            cleanupImportedFolderDatabases()
-        } catch (e: Exception) {
-            Log.e(TAG, "importConfig: Failed to cleanup invalid folder databases", e)
-        }
-
-        // Start syncthing after import if run conditions apply.
-        restartIfRunConditionsApply()
-        return failSuccess
+        return success
     }
 
     /**
@@ -315,100 +313,134 @@ class ConfigBackupManager(private val service: SyncthingService,
         }
     }
 
-    private fun importConfigSharedPrefs(file: File): Boolean {
-        var failSuccess = true
-        try {
-            // Read, deserialize shared preferences.
-            ObjectInputStream(FileInputStream(file)).use { objectInputStream ->
-                val objectFromInputStream = objectInputStream.readObject()
-                val sharedPrefsMap = objectFromInputStream as? Map<*, *>
-                if (sharedPrefsMap != null) {
-
-                    // Store backup folder to restore it back later in the process.
-                    val relPathToZip = preferences.getString(Constants.PREF_BACKUP_REL_PATH_TO_ZIP, "")
-                    val backupPassword = preferences.getString(Constants.PREF_BACKUP_PASSWORD, "")
-
-                    // Prepare a SharedPreferences commit.
-                    val editor = preferences.edit()
-                    editor.clear()
-                    for (entry in sharedPrefsMap.entries) {
-                        val prefKey = entry.key as String
-                        when (prefKey) {
-                            // Preferences that are no longer used and left-overs from previous versions of the app.
-                            "first_start",
-                            "advanced_folder_picker",
-                            "backup_folder_name",
-                            "bind_network",
-                            "log_to_file",
-                            "notification_type",
-                            "notify_crashes",
-                            "suggest_new_folder_root",
-                            "use_legacy_hashing",
-                            "pref_current_language",
-                            "restartOnWakeup",
-                            "wakelock_while_binary_running",
-                            "use_root",
-                            "important_news_shown_version" -> {
-                                logV("importConfig: Ignoring deprecated pref \"$prefKey\".")
-                            }
-                            // Cached information which is not available on SettingsActivity.
-                            Constants.PREF_APP_START_COUNTER,
-                            Constants.PREF_BTNSTATE_FORCE_START_STOP,
-                            Constants.PREF_DEBUG_FACILITIES_AVAILABLE,
-                            Constants.PREF_EVENT_PROCESSOR_LAST_SYNC_ID,
-                            Constants.PREF_LAST_BINARY_VERSION,
-                            Constants.PREF_LOCAL_DEVICE_ID,
-                            Constants.PREF_LAST_RUN_TIME -> {
-                                logV("importConfig: Ignoring cache pref \"$prefKey\".")
-                            }
-                            else -> {
-                                Log.i(TAG, "importConfig: Adding pref \"$prefKey\" to commit ...")
-
-                                // The editor only provides typed setters.
-                                val prefValue = entry.value
-                                when (prefValue) {
-                                    is Boolean -> editor.putBoolean(prefKey, prefValue)
-                                    is String -> editor.putString(prefKey, prefValue)
-                                    is Int -> editor.putInt(prefKey, prefValue)
-                                    is Float -> editor.putFloat(prefKey, prefValue)
-                                    is Long -> editor.putLong(prefKey, prefValue)
-                                    is Set<*> -> editor.putStringSet(prefKey, asSet(prefValue, String::class.java))
-                                    else -> Log.w(TAG, "importConfig: SharedPref type " + prefValue?.javaClass?.name + " is unknown")
-                                }
-                            }
-                        }
-                    }
-                    editor.putString(Constants.PREF_BACKUP_REL_PATH_TO_ZIP, relPathToZip)
-                    editor.putString(Constants.PREF_BACKUP_PASSWORD, backupPassword)
-
-                    /**
-                     * If all shared preferences have been added to the commit successfully,
-                     * apply the commit.
-                     */
-                    failSuccess = failSuccess && editor.commit()
-                } else {
-                    Log.e(TAG, "importConfig: Invalid object stream")
-                }
-            }
-        } catch (e: IOException) {
-            Log.e(TAG, "importConfig: Failed to import SharedPreferences #1", e)
-            failSuccess = false
-        } catch (e: ClassNotFoundException) {
-            Log.e(TAG, "importConfig: Failed to import SharedPreferences #1", e)
-            failSuccess = false
+    private fun openZip(path: File, password: String): ZipFile {
+        val zip = if (password.isEmpty()) ZipFile(path) else ZipFile(path, password.toCharArray())
+        if (password.isNotEmpty() && !zip.isEncrypted) {
+            throw IOException("The ZIP is not encrypted, but a backup password is configured")
         }
-        return failSuccess
+        return zip
     }
 
-    private fun <T> asSet(c: Set<*>?, type: Class<out T>): Set<T>? {
-        if (c == null) {
-            return null
+    private fun validateZipEntryNames(zip: ZipFile) {
+        for (header in zip.fileHeaders) {
+            val name = header.fileName.replace('\\', '/')
+            val segments = name.split('/')
+            if (name.startsWith('/') || Regex("^[A-Za-z]:").containsMatchIn(name) ||
+                segments.any { it == ".." }
+            ) {
+                throw IOException("Unsafe path in backup archive: ${header.fileName}")
+            }
         }
-        val set = HashSet<T>()
-        for (o in c) {
-            set.add(type.cast(o))
+    }
+
+    private fun ensureExtractedTreeIsContained(root: File) {
+        val canonicalRoot = root.canonicalFile.toPath()
+        root.walkTopDown().forEach { entry ->
+            if (!entry.canonicalFile.toPath().startsWith(canonicalRoot)) {
+                throw IOException("Extracted path escaped staging directory: ${entry.name}")
+            }
         }
-        return set
+    }
+
+    private fun validateExtractedImport(extracted: File) {
+        REQUIRED_BACKUP_FILES.forEach { name ->
+            val file = File(extracted, name)
+            if (!file.isFile || file.length() == 0L) {
+                throw IOException("Required backup file is missing or empty: $name")
+            }
+        }
+        val database = File(extracted, INDEX_DB_FOLDER)
+        if (database.exists() && !database.isDirectory) {
+            throw IOException("Backup index database is not a directory")
+        }
+        validateConfigXml(File(extracted, Constants.CONFIG_FILE))
+        // Deserialize before touching any live file or preference.
+        readImportedPreferences(
+            File(extracted, Constants.SHARED_PREFS_FILE),
+            preferences.getString(Constants.PREF_BACKUP_REL_PATH_TO_ZIP, DEFAULT_BACKUP_REL_PATH)
+                ?: DEFAULT_BACKUP_REL_PATH,
+            preferences.getString(Constants.PREF_BACKUP_PASSWORD, "") ?: "",
+        )
+    }
+
+    private fun validateConfigXml(file: File) {
+        val factory = DocumentBuilderFactory.newInstance()
+        factory.isXIncludeAware = false
+        factory.isExpandEntityReferences = false
+        factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true)
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        val root = factory.newDocumentBuilder().parse(file).documentElement
+        if (root.tagName != "configuration") {
+            throw IOException("Backup config.xml has an unexpected root element")
+        }
+    }
+
+    private fun readImportedPreferences(
+        file: File,
+        backupPath: String,
+        backupPassword: String,
+    ): Map<String, Any> {
+        val raw = ObjectInputStream(FileInputStream(file)).use { it.readObject() as? Map<*, *> }
+            ?: throw IOException("Invalid shared preferences backup")
+        val result = LinkedHashMap<String, Any>()
+        for ((rawKey, value) in raw) {
+            val key = rawKey as? String ?: throw IOException("Invalid preference key in backup")
+            if (key in DEPRECATED_PREFERENCES || key in CACHED_PREFERENCES) {
+                logV("importConfig: Ignoring obsolete/cache pref '$key'.")
+                continue
+            }
+            when (value) {
+                is Boolean, is String, is Int, is Float, is Long -> result[key] = value
+                is Set<*> -> {
+                    val strings = value.map {
+                        it as? String ?: throw IOException("Invalid string-set preference '$key'")
+                    }.toSet()
+                    result[key] = strings
+                }
+                else -> Log.w(TAG, "importConfig: Ignoring unsupported preference type for '$key'")
+            }
+        }
+        // Keep the destination's backup location and password, not the values from the source.
+        result[Constants.PREF_BACKUP_REL_PATH_TO_ZIP] = backupPath
+        result[Constants.PREF_BACKUP_PASSWORD] = backupPassword
+        return result
+    }
+
+    private fun snapshotPreferences(values: Map<String, *>): Map<String, Any> =
+        values.mapNotNull { (key, value) ->
+            when (value) {
+                is Boolean, is String, is Int, is Float, is Long -> key to value
+                is Set<*> -> key to value.filterIsInstance<String>().toSet()
+                else -> null
+            }
+        }.toMap()
+
+    private fun applyPreferences(values: Map<String, Any>): Boolean =
+        writePreferences(preferences.edit().clear(), values)
+
+    private fun restorePreferences(values: Map<String, Any>): Boolean {
+        val restored = writePreferences(preferences.edit().clear(), values)
+        if (!restored) {
+            Log.e(TAG, "importConfig: Failed to restore pre-import preferences")
+        }
+        return restored
+    }
+
+    private fun writePreferences(
+        editor: SharedPreferences.Editor,
+        values: Map<String, Any>,
+    ): Boolean {
+        for ((key, value) in values) {
+            when (value) {
+                is Boolean -> editor.putBoolean(key, value)
+                is String -> editor.putString(key, value)
+                is Int -> editor.putInt(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Long -> editor.putLong(key, value)
+                is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+            }
+        }
+        return editor.commit()
     }
 
     private fun logV(logMessage: String) {
@@ -419,6 +451,33 @@ class ConfigBackupManager(private val service: SyncthingService,
 
     companion object {
         private const val TAG = "ConfigBackupManager"
+        private const val INDEX_DB_FOLDER = "index-v2"
+
+        private val REQUIRED_BACKUP_FILES = listOf(
+            Constants.CONFIG_FILE,
+            Constants.PRIVATE_KEY_FILE,
+            Constants.PUBLIC_KEY_FILE,
+            Constants.HTTPS_CERT_FILE,
+            Constants.HTTPS_KEY_FILE,
+            Constants.SHARED_PREFS_FILE,
+        )
+
+        private val DEPRECATED_PREFERENCES = setOf(
+            "first_start", "advanced_folder_picker", "backup_folder_name", "bind_network",
+            "log_to_file", "notification_type", "notify_crashes", "suggest_new_folder_root",
+            "use_legacy_hashing", "pref_current_language", "restartOnWakeup",
+            "wakelock_while_binary_running", "use_root", "important_news_shown_version",
+        )
+
+        private val CACHED_PREFERENCES = setOf(
+            Constants.PREF_APP_START_COUNTER,
+            Constants.PREF_BTNSTATE_FORCE_START_STOP,
+            Constants.PREF_DEBUG_FACILITIES_AVAILABLE,
+            Constants.PREF_EVENT_PROCESSOR_LAST_SYNC_ID,
+            Constants.PREF_LAST_BINARY_VERSION,
+            Constants.PREF_LOCAL_DEVICE_ID,
+            Constants.PREF_LAST_RUN_TIME,
+        )
 
         /**
          * Default relative path of the backup zip below the external storage root.

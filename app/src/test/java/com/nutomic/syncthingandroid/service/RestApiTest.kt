@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import okhttp3.mockwebserver.Dispatcher
@@ -121,10 +122,15 @@ class RestApiTest {
      */
     private class StartupDispatcher : Dispatcher() {
         private val queuedResponses = java.util.concurrent.LinkedBlockingQueue<MockResponse>()
+        private val pathResponses = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.LinkedBlockingQueue<MockResponse>>()
         val hits = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
 
         fun enqueue(response: MockResponse) {
             queuedResponses.add(response)
+        }
+
+        fun enqueueFor(path: String, response: MockResponse) {
+            pathResponses.computeIfAbsent(path) { java.util.concurrent.LinkedBlockingQueue() }.add(response)
         }
 
         fun hitsOf(pathPrefix: String): Int = hits[pathPrefix]?.get() ?: 0
@@ -134,7 +140,8 @@ class RestApiTest {
 
         override fun dispatch(request: RecordedRequest): MockResponse {
             val path = request.path!!
-            val response = queuedResponses.poll() ?: when {
+            val pathKey = path.substringBefore('?')
+            val response = pathResponses[pathKey]?.poll() ?: queuedResponses.poll() ?: when {
                 path.startsWith("/rest/system/version") -> json(VERSION_JSON)
                 path.startsWith("/rest/system/config") -> json(CONFIG_JSON)
                 path.startsWith("/rest/system/status") -> json(SYSTEM_STATUS_JSON)
@@ -220,6 +227,28 @@ class RestApiTest {
 
         awaitPathHit("/rest/cluster/pending/devices")
         awaitPathHit("/rest/cluster/pending/folders")
+    }
+
+    @Test
+    fun removeFolderAndWait_keepsLoadedFolderWhenRestRejectsConfig() {
+        restApi.readConfigFromRestApi()
+        awaitConfigLoaded()
+        assertEquals(listOf("f1"), restApi.folders.map { it.id })
+
+        dispatcher.enqueueFor(
+            "/rest/system/config",
+            MockResponse().setResponseCode(500).setBody("injected config rejection"),
+        )
+        val failed = runCatching { runBlocking { restApi.removeFolderAndWait("f1") } }
+        assertTrue("REST error must be returned to the caller", failed.isFailure)
+        assertEquals("failed remove must leave the in-memory core config intact", listOf("f1"), restApi.folders.map { it.id })
+
+        dispatcher.enqueueFor(
+            "/rest/system/config",
+            MockResponse().setResponseCode(200).setBody("OK"),
+        )
+        runBlocking { restApi.removeFolderAndWait("f1") }
+        assertTrue(restApi.folders.isEmpty())
     }
 
     @Test

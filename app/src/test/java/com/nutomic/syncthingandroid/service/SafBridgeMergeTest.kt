@@ -139,6 +139,233 @@ class SafBridgeMergeTest {
     }
 
     @Test
+    fun failedProviderCopyKeepsOldFileAndRetriesSameDirectionNextPass() {
+        val last = mapOf("same.txt" to file(4, 0, "old-hash"))
+        val saf = mapOf("same.txt" to file(4, 0, "new-hash"))
+        val forwarded = last
+
+        val first = MirrorMerge.plan(saf, forwarded, last)
+        assertEquals(listOf("same.txt"), first.copyToForwarded.map { it.first })
+
+        // Inject a failed copy/replace. The baseline must remain the old verified snapshot.
+        val afterFailure = MirrorMerge.verifiedResult(
+            first,
+            appliedFwd = emptySet(),
+            appliedSaf = emptySet(),
+            baseline = last,
+        )
+        assertEquals(last, afterFailure)
+
+        val retry = MirrorMerge.plan(saf, forwarded, afterFailure)
+        assertEquals(listOf("same.txt"), retry.copyToForwarded.map { it.first })
+        assertTrue(retry.copyToSaf.isEmpty())
+        assertTrue(retry.deleteInForwarded.isEmpty())
+        assertTrue(retry.deleteInSaf.isEmpty())
+    }
+
+    @Test
+    fun providerParentDeletionWithChangedForwardedChildRetainsCopySource() {
+        val last = mapOf(
+            "docs" to dir(),
+            "docs/item.txt" to file(3, 10, "old"),
+        )
+        val saf = emptyMap<String, SafBridge.NodeInfo>()
+        val forwarded = mapOf(
+            "docs" to dir(),
+            "docs/item.txt" to file(3, 20, "new"),
+        )
+
+        val plan = MirrorMerge.plan(saf, forwarded, last)
+
+        assertFalse("the copy source parent must not be deleted", "docs" in plan.deleteInForwarded)
+        assertTrue("restore the provider parent before writing the child", "docs" in plan.makeDirsInSaf)
+        assertEquals(listOf("docs/item.txt"), plan.copyToSaf)
+        assertTrue(plan.makeDirsInSaf.indexOf("docs") >= 0)
+        // applyToSaf processes every directory before any file copy.
+        assertTrue(plan.makeDirsInSaf.indexOf("docs") < plan.copyToSaf.size)
+
+        val failed = MirrorMerge.verifiedResult(
+            plan,
+            appliedFwd = emptySet(),
+            appliedSaf = emptySet(),
+            baseline = last,
+        )
+        assertEquals(last, failed)
+        val retry = MirrorMerge.plan(saf, forwarded, failed)
+        assertFalse("a failed parent restore must not delete its copy source", "docs" in retry.deleteInForwarded)
+        assertTrue("failed copy-up is retried in the same direction", "docs/item.txt" in retry.copyToSaf)
+
+        val committed = MirrorMerge.verifiedResult(
+            plan,
+            appliedFwd = emptySet(),
+            appliedSaf = setOf("docs", "docs/item.txt"),
+            baseline = last,
+        )
+        assertEquals(dir(), committed.getValue("docs"))
+        assertEquals(file(3, 0, "new"), committed.getValue("docs/item.txt"))
+        assertFalse(MirrorMerge.plan(forwarded, forwarded, committed).hasWork())
+    }
+
+    @Test
+    fun missingCurrentHashUsesMetadataAndPreservesSnapshotHashAcrossPasses() {
+        val baseline = mapOf("same.txt" to file(4, 0, "known-old"))
+        val currentWithoutHashes = mapOf(
+            "same.txt" to file(4, 123),
+        )
+
+        val first = MirrorMerge.plan(currentWithoutHashes, currentWithoutHashes, baseline)
+        assertFalse(first.hasWork())
+        val afterFirst = MirrorMerge.verifiedResult(first, emptySet(), emptySet(), baseline)
+        assertEquals("known-old", afterFirst.getValue("same.txt").contentHash)
+
+        val second = MirrorMerge.plan(currentWithoutHashes, currentWithoutHashes, afterFirst)
+        assertFalse("unknown hashes must not cause repeated writes", second.hasWork())
+        assertEquals(afterFirst, MirrorMerge.verifiedResult(second, emptySet(), emptySet(), afterFirst))
+
+        // A genuinely observed content change remains detectable when both current hashes exist.
+        val changedProvider = mapOf("same.txt" to file(4, 0, "known-new"))
+        val changed = MirrorMerge.plan(changedProvider, baseline, baseline)
+        assertEquals(listOf("same.txt"), changed.copyToForwarded.map { it.first })
+        assertTrue(changed.copyToSaf.isEmpty())
+    }
+
+    @Test
+    fun sameSizeUnknownHashCannotCreateFalseTwoSidedConflictOrPushOldSnapshot() {
+        val baseline = mapOf("same.txt" to file(4, 0, "old"))
+        val providerScanWithoutHash = mapOf("same.txt" to file(4, 0))
+        val forwardedStillOld = mapOf("same.txt" to file(4, 0, "old"))
+
+        val unknown = MirrorMerge.plan(providerScanWithoutHash, forwardedStillOld, baseline)
+        assertFalse("unknown provider hash is not a second-side edit", unknown.hasWork())
+
+        val forwardedHasNewContent = mapOf("same.txt" to file(4, 0, "new"))
+
+        val plan = MirrorMerge.plan(providerScanWithoutHash, forwardedHasNewContent, baseline)
+
+        assertTrue(plan.copyToForwarded.isEmpty())
+        assertEquals(listOf("same.txt"), plan.copyToSaf)
+    }
+
+    @Test
+    fun directorySideWithChangedChildWinsFileDirectoryCollisionAndSettles() {
+        val baseline = mapOf("node" to file(1, 10, "base"))
+
+        val providerDirectory = mapOf(
+            "node" to dir(),
+            "node/child.txt" to file(2, 20, "provider-child"),
+        )
+        val forwardedFile = mapOf("node" to file(1, 10, "base"))
+        val providerWins = MirrorMerge.plan(providerDirectory, forwardedFile, baseline)
+        assertEquals(listOf("node"), providerWins.makeDirsInForwarded)
+        assertEquals(listOf("node/child.txt"), providerWins.copyToForwarded.map { it.first })
+        assertTrue(providerWins.copyToSaf.isEmpty())
+
+        val providerResult = MirrorMerge.verifiedResult(
+            providerWins,
+            appliedFwd = setOf("node", "node/child.txt"),
+            appliedSaf = emptySet(),
+            baseline = baseline,
+        )
+        assertFalse(MirrorMerge.plan(providerDirectory, providerResult, providerResult).hasWork())
+
+        val forwardedDirectory = mapOf(
+            "node" to dir(),
+            "node/child.txt" to file(2, 20, "forwarded-child"),
+        )
+        val providerFile = mapOf("node" to file(1, 10, "base"))
+        val forwardedWins = MirrorMerge.plan(providerFile, forwardedDirectory, baseline)
+        assertEquals(listOf("node"), forwardedWins.makeDirsInSaf)
+        assertEquals(listOf("node/child.txt"), forwardedWins.copyToSaf)
+        assertTrue(forwardedWins.copyToForwarded.isEmpty())
+
+        val forwardedResult = MirrorMerge.verifiedResult(
+            forwardedWins,
+            appliedFwd = emptySet(),
+            appliedSaf = setOf("node", "node/child.txt"),
+            baseline = baseline,
+        )
+        assertFalse(MirrorMerge.plan(forwardedResult, forwardedDirectory, forwardedResult).hasWork())
+    }
+
+    @Test
+    fun cleanDirectoryToFileSwapsDeleteChildrenBeforeReplacingParent() {
+        val baseline = mapOf(
+            "node" to dir(),
+            "node/child.txt" to file(3, 10, "child"),
+        )
+
+        val providerFile = mapOf("node" to file(4, 20, "provider-file"))
+        val forwardedDirectory = baseline
+        val providerToForwarded = MirrorMerge.plan(providerFile, forwardedDirectory, baseline)
+        assertEquals(listOf("node/child.txt"), providerToForwarded.deleteInForwarded)
+        assertEquals(listOf("node"), providerToForwarded.copyToForwarded.map { it.first })
+        // applyToForwardedDir's delete phase completes before its copy phase.
+
+        val forwardedFile = mapOf("node" to file(4, 20, "forwarded-file"))
+        val providerDirectory = baseline
+        val forwardedToProvider = MirrorMerge.plan(providerDirectory, forwardedFile, baseline)
+        assertEquals(listOf("node/child.txt"), forwardedToProvider.deleteInSaf)
+        assertEquals(listOf("node"), forwardedToProvider.copyToSaf)
+        // applyToSaf deletes child documents before the file is installed at their parent path.
+
+        val providerCommitted = MirrorMerge.verifiedResult(
+            providerToForwarded,
+            appliedFwd = setOf("node/child.txt", "node"),
+            appliedSaf = emptySet(),
+            baseline = baseline,
+        )
+        assertFalse(MirrorMerge.plan(providerFile, providerFile, providerCommitted).hasWork())
+
+        val forwardedCommitted = MirrorMerge.verifiedResult(
+            forwardedToProvider,
+            appliedFwd = emptySet(),
+            appliedSaf = setOf("node/child.txt", "node"),
+            baseline = baseline,
+        )
+        assertFalse(MirrorMerge.plan(forwardedCommitted, forwardedFile, forwardedCommitted).hasWork())
+    }
+
+    @Test
+    fun failedFileDirectorySwapKeepsConcurrentChildAndSettlesNextRound() {
+        val baseline = mapOf(
+            "node" to dir(),
+            "node/old.txt" to file(3, 10, "old"),
+        )
+        val providerFile = mapOf("node" to file(4, 20, "provider-file"))
+        val scannedForwarded = baseline
+        val initial = MirrorMerge.plan(providerFile, scannedForwarded, baseline)
+        assertEquals(listOf("node/old.txt"), initial.deleteInForwarded)
+        assertEquals(listOf("node"), initial.copyToForwarded.map { it.first })
+
+        // The planned child deletion succeeded, but replacing the parent was refused because a
+        // core write created a new child after the scan. Keep the directory baseline for retry.
+        val afterFailedReplace = MirrorMerge.verifiedResult(
+            initial,
+            appliedFwd = setOf("node/old.txt"),
+            appliedSaf = emptySet(),
+            baseline = baseline,
+        )
+        val concurrentForwarded = mapOf(
+            "node" to dir(),
+            "node/concurrent.txt" to file(4, 30, "concurrent"),
+        )
+        val retry = MirrorMerge.plan(providerFile, concurrentForwarded, afterFailedReplace)
+
+        // The concurrently edited directory wins the structural conflict; never remove its child.
+        assertEquals(listOf("node"), retry.makeDirsInSaf)
+        assertEquals(listOf("node/concurrent.txt"), retry.copyToSaf)
+        assertTrue(retry.deleteInForwarded.isEmpty())
+
+        val settled = MirrorMerge.verifiedResult(
+            retry,
+            appliedFwd = emptySet(),
+            appliedSaf = setOf("node", "node/concurrent.txt"),
+            baseline = afterFailedReplace,
+        )
+        assertFalse(MirrorMerge.plan(settled, concurrentForwarded, settled).hasWork())
+    }
+
+    @Test
     fun plan_sameSizeAndUnreliableMtimeUsesContentHash() {
         val last = mapOf("f.bin" to file(4, 0, "old"))
         val saf = mapOf("f.bin" to file(4, 0, "new"))
@@ -206,13 +433,34 @@ class SafBridgeMergeTest {
     @Test
     fun verifiedResult_withBaseline_retainsFailedProviderDelete() {
         val last = mapOf("gone.txt" to file(5, 100))
-        val plan = MirrorMerge.plan(emptyMap(), emptyMap(), last)
+        val plan = MirrorMerge.plan(last, emptyMap(), last)
+        assertEquals(listOf("gone.txt"), plan.deleteInSaf)
 
         val failed = MirrorMerge.verifiedResult(plan, emptySet(), emptySet(), last)
         assertEquals(last, failed)
 
-        val retry = MirrorMerge.plan(emptyMap(), emptyMap(), failed)
+        val retry = MirrorMerge.plan(last, emptyMap(), failed)
         assertEquals(listOf("gone.txt"), retry.deleteInSaf)
+    }
+
+    @Test
+    fun bothSidesDeletedPathAdvancesSnapshotInsteadOfRetryingDeleteForever() {
+        val last = mapOf("gone.txt" to file(5, 100))
+        val bothDeleted = emptyMap<String, SafBridge.NodeInfo>()
+
+        val first = MirrorMerge.plan(bothDeleted, bothDeleted, last)
+        assertTrue(first.deleteInSaf.isEmpty())
+        assertEquals(setOf("gone.txt"), first.confirmedAbsent)
+        // Both full scans confirm absence. Advance only the snapshot; there is no target-side
+        // operation to retry, and a later new provider file is then an unambiguous addition.
+        val afterFirst = MirrorMerge.verifiedResult(
+            first,
+            appliedFwd = emptySet(),
+            appliedSaf = emptySet(),
+            baseline = last,
+        )
+        assertTrue(afterFirst.isEmpty())
+        assertFalse(MirrorMerge.plan(bothDeleted, bothDeleted, afterFirst).hasWork())
     }
 
     @Test

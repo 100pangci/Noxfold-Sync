@@ -491,14 +491,28 @@ private fun FolderEditConfirmDialogs(
 ) {
     val navigator = LocalAppNavigator.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     if (showDeleteDialog && folder != null) {
         ConfirmDialog(
             message = stringResource(R.string.remove_folder_confirm),
             onConfirm = {
                 onDismissDeleteDialog()
-                // Drop the SAF forwarding bridge if this folder had one (no-op otherwise).
-                (context.applicationContext as SyncthingApp).safBridge.unregister(folder.path)
-                FolderEditActions.delete(configRouter, api, preferences, folder.id, navigator)
+                scope.launch {
+                    try {
+                        FolderEditActions.delete(
+                            configRouter = configRouter,
+                            api = api,
+                            preferences = preferences,
+                            folderId = folder.id,
+                            folderPath = folder.path,
+                            safBridge = (context.applicationContext as SyncthingApp).safBridge,
+                            navigator = navigator,
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to remove folder", e)
+                        Toast.makeText(context, R.string.folder_delete_failed, Toast.LENGTH_LONG).show()
+                    }
+                }
             },
             onDismiss = onDismissDeleteDialog
         )

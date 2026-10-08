@@ -4,12 +4,17 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
+import java.io.IOException
 import com.nutomic.syncthingandroid.model.Folder
 import com.nutomic.syncthingandroid.service.Constants
 import com.nutomic.syncthingandroid.service.RestApi
+import com.nutomic.syncthingandroid.service.SafBridge
 import com.nutomic.syncthingandroid.service.RunConditionEvents
+import com.nutomic.syncthingandroid.R
 import com.nutomic.syncthingandroid.ui.nav.AppNavigator
 import com.nutomic.syncthingandroid.util.ConfigRouter
+import com.nutomic.syncthingandroid.util.deepCopy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -73,24 +78,34 @@ internal object FolderEditActions {
             val capturedUri = folderUri
             val capturedPath = folder.path
             scope.launch {
-                withContext(Dispatchers.IO) {
-                    preCreateFolderStruct(context, capturedUri, capturedPath)
-                }
-                configRouter.addFolder(api, folder)
+                try {
+                    withContext(Dispatchers.IO) {
+                        if (!preCreateFolderStruct(context, capturedUri, capturedPath)) {
+                            throw IOException("Could not create folder marker structure")
+                        }
+                        if (ignoreListText.isNotBlank()) {
+                            // A new folder remains paused until Syncthing has acknowledged both
+                            // the folder config and its ignore rules. No timer can race the first
+                            // scan; a failed rule POST leaves the configured folder paused.
+                            val pausedFolder = deepCopy(folder).apply { paused = true }
+                            configRouter.addFolderAndWait(api, pausedFolder)
+                            configRouter.postFolderIgnoreListAndWait(
+                                api, folder, ignoreListText.split("\n").toTypedArray()
+                            )
+                            configRouter.updateFolderAndWait(api, folder)
+                        } else {
+                            configRouter.addFolderAndWait(api, folder)
+                        }
+                    }
 
-                // Push ignore patterns entered during creation; the folder must
-                // exist in Syncthing first, so give the config POST a moment.
-                if (ignoreListText.isNotBlank()) {
-                    kotlinx.coroutines.delay(1000)
-                    configRouter.postFolderIgnoreList(
-                        api, folder, ignoreListText.split("\n").toTypedArray()
-                    )
+                    RunConditionEvents.fireSyncTrigger(beginActiveTimeWindow = true)
+                    setSaving(false)
+                    navigator.navigateBack()
+                } catch (e: Exception) {
+                    Log.e(TAG, "onSave: Failed to create folder or save ignore rules", e)
+                    setSaving(false)
+                    Toast.makeText(context, R.string.create_folder_failed, Toast.LENGTH_LONG).show()
                 }
-
-                // Start sync after adding a folder.
-                RunConditionEvents.fireSyncTrigger(beginActiveTimeWindow = true)
-                setSaving(false)
-                navigator.navigateBack()
             }
             return
         }
@@ -131,14 +146,19 @@ internal object FolderEditActions {
         navigator.navigateBack()
     }
 
-    fun delete(
+    suspend fun delete(
         configRouter: ConfigRouter,
         api: RestApi?,
         preferences: SharedPreferences,
         folderId: String,
+        folderPath: String,
+        safBridge: SafBridge,
         navigator: AppNavigator,
     ) {
-        configRouter.removeFolder(api, folderId)
+        configRouter.removeFolderAndWait(api, folderId)
+        // Only discard the persisted mapping and working tree after the core/config.xml has
+        // confirmed the folder removal. A REST failure therefore leaves both sides intact.
+        withContext(Dispatchers.IO) { safBridge.unregister(folderPath) }
         if (folderId == Constants.syncthingCameraFolderId) {
             preferences.edit().putBoolean(Constants.PREF_ENABLE_SYNCTHING_CAMERA, false).apply()
         }

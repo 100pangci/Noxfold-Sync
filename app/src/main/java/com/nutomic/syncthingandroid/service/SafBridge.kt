@@ -99,7 +99,9 @@ internal fun scanForwardedSubtree(
  *    snapshot (three-way merge), so "deleted on one side" and "changed on the
  *    other" are told apart and deletions cannot ping-pong.
  *  - If a path changed on BOTH sides since the last pass, the forwarded-dir side
- *    wins (that content is what the core already propagated); this is logged.
+ *    wins, except that an edited directory subtree wins a file/directory replacement
+ *    conflict so its children are not discarded. A removed provider parent is kept
+ *    long enough to copy any changed forwarded child back up.
  *  - SAF does not provide reliable, precise recursive filesystem notifications comparable to
  *    inotify. Provider observers are treated as change hints, while reconciliation remains the
  *    source of truth; a periodic full reconciliation is always retained as a fallback.
@@ -713,11 +715,30 @@ class SafBridge(private val context: Context) {
             val saf = LinkedHashMap(safMetadata)
             val forwarded = LinkedHashMap(forwardedMetadata)
             val paths = saf.keys + forwarded.keys + last.keys
+            val pathsWithStructuralConflict = LinkedHashSet<String>()
+            for (path in paths) {
+                val safNode = saf[path]
+                val forwardedNode = forwarded[path]
+                val hasDirectorySide = safNode?.isDir == true || forwardedNode?.isDir == true
+                val hasOtherShape = safNode?.isDir != true || forwardedNode?.isDir != true
+                val replacingKnownDirectory = last[path]?.isDir == true
+                val competingCurrentTypes = safNode != null && forwardedNode != null &&
+                    safNode.isDir != forwardedNode.isDir
+                if (hasDirectorySide && hasOtherShape &&
+                    (replacingKnownDirectory || competingCurrentTypes)
+                ) {
+                    pathsWithStructuralConflict.add(path)
+                }
+            }
             for (path in paths) {
                 val safNode = saf[path]
                 val forwardedNode = forwarded[path]
                 val baseline = last[path]
-                if (!needsContentHash(safNode, baseline) &&
+                val mustHashForTreeConflict = pathsWithStructuralConflict.any {
+                    path == it || path.startsWith("$it/")
+                }
+                if (!mustHashForTreeConflict &&
+                    !needsContentHash(safNode, baseline) &&
                     !needsContentHash(forwardedNode, baseline)
                 ) {
                     continue
@@ -742,6 +763,12 @@ class SafBridge(private val context: Context) {
         ): Boolean {
             if (current?.isDir != false) {
                 return false
+            }
+            // A persisted hash is meaningful only when this scan compares the same kind of
+            // evidence. Re-hash files whose baseline has a hash; otherwise an unknown current
+            // hash must fall back to metadata rather than being treated as a content change.
+            if (baseline?.contentHash != null) {
+                return current.contentHash == null
             }
             if (baseline == null) {
                 return current.mtime == 0L
@@ -796,7 +823,7 @@ class SafBridge(private val context: Context) {
                 if (!isCurrent(this@Bridge)) {
                     return applied
                 }
-                if (File(forwardedDir, path).deleteRecursively()) {
+                if (deleteForwardedNode(path, plan.forwardedAtScan[path])) {
                     applied.add(path)
                 } else {
                     Log.w(TAG, "applyToForwardedDir: Failed to delete $path")
@@ -806,62 +833,104 @@ class SafBridge(private val context: Context) {
                 if (!isCurrent(this@Bridge)) {
                     return applied
                 }
-                val dir = File(forwardedDir, path)
-                if (dir.mkdirs() || dir.isDirectory) {
+                if (createForwardedDirectory(path, plan.forwardedAtScan[path])) {
                     applied.add(path)
                 } else {
                     Log.w(TAG, "applyToForwardedDir: Failed to create dir $path")
                 }
             }
-            val tempDir = File(bridgeRoot, stateKey + ".tmp")
-            tempDir.mkdirs()
             for ((path, info) in plan.copyToForwarded) {
                 if (!isCurrent(this@Bridge)) {
                     break
                 }
                 val target = File(forwardedDir, path)
-                target.parentFile?.mkdirs()
-                if (target.exists()) {
-                    target.delete()
-                }
-                val stream = tree.open(path)
-                if (stream == null) {
-                    Log.w(TAG, "applyToForwardedDir: Provider stream unavailable for $path")
+                if (!AtomicFileCopy.copy(
+                        openInput = { tree.open(path) },
+                        target = target,
+                        expectedSize = info.size,
+                        expectedHash = info.contentHash,
+                        expectedMtime = info.mtime,
+                        expectedTargetKnown = true,
+                        expectedTarget = plan.forwardedAtScan[path],
+                        backupDir = File(bridgeRoot, stateKey + ".replace-backups"),
+                        beforeReplace = { check(isCurrent(this@Bridge)) },
+                    )
+                ) {
+                    Log.w(TAG, "applyToForwardedDir: Failed to safely forward $path")
                     continue
                 }
-                try {
-                    val temp = File.createTempFile("fwd", ".part", tempDir)
-                    stream.use { input ->
-                        temp.outputStream().use { output -> input.copyTo(output) }
+                applied.add(path)
+            }
+            return applied
+        }
+
+        private fun deleteForwardedNode(path: String, expected: NodeInfo?): Boolean {
+            val target = File(forwardedDir, path)
+            if (!target.exists()) return expected == null
+            if (!matchesForwardedNode(target, expected)) return false
+            if (target.isDirectory) {
+                val children = target.listFiles() ?: return false
+                if (children.isNotEmpty()) {
+                    // Internal markers are intentionally omitted from snapshots. Remove only
+                    // those after moving the directory out of the synced tree; if a concurrent
+                    // user child appeared, restore the directory and leave it untouched.
+                    if (children.any { !isSyncthingInternalName(it.name) }) return false
+                    val backup = File(
+                        bridgeRoot,
+                        "${stateKey}.delete-${java.util.UUID.randomUUID()}",
+                    )
+                    if (!target.renameTo(backup)) return false
+                    val movedChildren = backup.listFiles() ?: run {
+                        backup.renameTo(target)
+                        return false
                     }
-                    // A partially written file must never be renamed into place.
-                    if (temp.length() != info.size) {
-                        Log.w(TAG, "applyToForwardedDir: Size mismatch after copy of $path")
-                        temp.delete()
-                        continue
+                    if (movedChildren.any { !isSyncthingInternalName(it.name) }) {
+                        backup.renameTo(target)
+                        return false
                     }
-                    if (!isCurrent(this@Bridge)) {
-                        temp.delete()
-                        break
+                    if (!backup.deleteRecursively()) {
+                        backup.renameTo(target)
+                        return false
                     }
-                    if (!temp.renameTo(target)) {
-                        temp.copyTo(target, overwrite = true)
-                        temp.delete()
-                    }
-                    if (info.mtime > 0) {
-                        target.setLastModified(info.mtime)
-                    }
-                    if (target.length() == info.size) {
-                        applied.add(path)
-                    } else {
-                        Log.w(TAG, "applyToForwardedDir: Verification failed for $path")
-                    }
-                } catch (e: IOException) {
-                    Log.w(TAG, "applyToForwardedDir: Failed to forward $path", e)
+                    return true
                 }
             }
-            tempDir.deleteRecursively()
-            return applied
+            return target.delete()
+        }
+
+        private fun createForwardedDirectory(path: String, expected: NodeInfo?): Boolean {
+            val target = File(forwardedDir, path)
+            if (target.isDirectory) return expected?.isDir != false
+            val parent = target.parentFile ?: return false
+            if (!parent.isDirectory && !parent.mkdirs()) return false
+            if (!target.exists()) return target.mkdir() || target.isDirectory
+            if (expected?.isDir != false || !matchesForwardedNode(target, expected)) return false
+
+            val backup = File(bridgeRoot, "${stateKey}.replace-${java.util.UUID.randomUUID()}")
+            if (!target.renameTo(backup)) return false
+            if (!target.mkdir()) {
+                backup.renameTo(target)
+                return false
+            }
+            // Keep the old file outside the synced tree if removal fails; never recursively
+            // delete data that changed after the scan.
+            backup.delete()
+            return true
+        }
+
+        private fun matchesForwardedNode(target: File, expected: NodeInfo?): Boolean {
+            if (expected == null || !target.exists() || target.isDirectory != expected.isDir) {
+                return false
+            }
+            if (expected.isDir) {
+                return true
+            }
+            if (target.length() != expected.size) return false
+            if (expected.contentHash != null) {
+                return ContentHasher.sha256(target) == expected.contentHash
+            }
+            return expected.mtime == 0L || target.lastModified() == 0L ||
+                target.lastModified() == expected.mtime
         }
 
         /**
@@ -874,7 +943,7 @@ class SafBridge(private val context: Context) {
                 if (!isCurrent(this@Bridge)) {
                     return applied
                 }
-                if (tree.delete(path)) {
+                if (tree.delete(path, plan.safAtScan[path])) {
                     applied.add(path)
                 } else {
                     Log.w(TAG, "applyToSaf: Failed to delete $path")
@@ -884,7 +953,7 @@ class SafBridge(private val context: Context) {
                 if (!isCurrent(this@Bridge)) {
                     return applied
                 }
-                if (tree.createDir(path)) {
+                if (tree.createDir(path, plan.safAtScan[path])) {
                     applied.add(path)
                 } else {
                     Log.w(TAG, "applyToSaf: Failed to create dir $path")
@@ -899,8 +968,20 @@ class SafBridge(private val context: Context) {
                     continue
                 }
                 try {
+                    val sourceInfo = plan.forwardedAtScan[path] ?: continue
+                    val verifiedSourceInfo = if (sourceInfo.contentHash != null) {
+                        sourceInfo
+                    } else {
+                        sourceInfo.copy(contentHash = ContentHasher.sha256(source))
+                    }
                     source.inputStream().use { input ->
-                        if (tree.writeFile(path, input)) {
+                        if (tree.writeFile(
+                                path,
+                                input,
+                                verifiedSourceInfo,
+                                plan.safAtScan[path],
+                            )
+                        ) {
                             applied.add(path)
                         } else {
                             Log.w(TAG, "applyToSaf: Failed to write $path")
@@ -925,7 +1006,11 @@ class SafBridge(private val context: Context) {
  *  - changed on one side only  -> apply that side to the other;
  *  - deleted on one side only  -> propagate the deletion;
  *  - changed/deleted on both   -> the forwarded-dir side wins (its content is what
- *    the core already propagated); logged via [Plan.summary].
+ *    the core already propagated).
+ * Structural conflicts are tree-aware: when one side has a file and the other a directory,
+ * a directory subtree with changed descendants wins over replacing it with the competing file.
+ * A deleted provider parent is recreated when a changed forwarded descendant still needs to be
+ * copied; unchanged descendants can still be deleted. This keeps copy sources alive until use.
  */
 internal object MirrorMerge {
 
@@ -937,6 +1022,9 @@ internal object MirrorMerge {
         val makeDirsInSaf: List<String>,
         val copyToSaf: List<String>,
         val result: Map<String, SafBridge.NodeInfo>,
+        val confirmedAbsent: Set<String>,
+        val safAtScan: Map<String, SafBridge.NodeInfo>,
+        val forwardedAtScan: Map<String, SafBridge.NodeInfo>,
     ) {
         fun hasWork(): Boolean {
             return deleteInForwarded.isNotEmpty() || makeDirsInForwarded.isNotEmpty() ||
@@ -978,6 +1066,7 @@ internal object MirrorMerge {
         val touchedSaf = (plan.deleteInSaf + plan.makeDirsInSaf + plan.copyToSaf).toSet()
         val touched = touchedFwd + touchedSaf
         val result = LinkedHashMap(baseline)
+        plan.confirmedAbsent.forEach(result::remove)
 
         // Unchanged paths and successfully represented targets can be copied directly. Touched
         // paths are applied below so failures can keep their baseline entry.
@@ -1019,9 +1108,12 @@ internal object MirrorMerge {
         if (a.isDir) {
             return true
         }
-        if (a.contentHash != null || b.contentHash != null) {
-            return a.size == b.size && a.contentHash != null && a.contentHash == b.contentHash
+        if (a.contentHash != null && b.contentHash != null) {
+            return a.size == b.size && a.contentHash == b.contentHash
         }
+        // A missing hash is unknown, not proof of different content. The bridge hashes current
+        // files whenever the baseline carries a hash; this metadata fallback keeps legacy or
+        // temporarily unhashable snapshots from manufacturing a two-sided conflict.
         return a.size == b.size &&
             (a.mtime == b.mtime || a.mtime == 0L || b.mtime == 0L)
     }
@@ -1041,6 +1133,28 @@ internal object MirrorMerge {
         val makeDirsInSaf = ArrayList<String>()
         val copyToSaf = ArrayList<String>()
         val result = LinkedHashMap<String, SafBridge.NodeInfo>()
+        val confirmedAbsent = LinkedHashSet<String>()
+
+        // A file/directory replacement at a path can hide concurrent edits below that path.
+        // If the directory side has diverged descendants, keep that whole subtree and replace
+        // the competing file with a directory. This preserves the edited source instead of
+        // deleting it as a side effect of replacing the parent node.
+        val structuralWinners = ArrayList<Pair<String, Boolean>>() // path -> provider(SAF) wins
+        for (path in allPaths) {
+            val s = saf[path] ?: continue
+            val f = fwd[path] ?: continue
+            if (s.isDir == f.isDir) continue
+            val directoryIsSaf = s.isDir
+            val directoryTree = if (directoryIsSaf) saf else fwd
+            val changedDescendant = (directoryTree.keys + last.keys).any { child ->
+                child.startsWith("$path/") &&
+                    !sameNode(directoryTree[child], last[child])
+            }
+            if (changedDescendant && structuralWinners.none { path.startsWith("${it.first}/") }) {
+                structuralWinners.add(path to directoryIsSaf)
+            }
+        }
+        structuralWinners.sortBy { depth(it.first) }
 
         // Actions are driven by WHICH side changed, never by comparing the two
         // current sides (their mtimes can legitimately differ; provider mtimes are
@@ -1051,13 +1165,67 @@ internal object MirrorMerge {
             val s = saf[path]
             val f = fwd[path]
             val l = last[path]
+
+            if (s == null && f == null) {
+                if (l != null) confirmedAbsent.add(path)
+                continue
+            }
+
+            val structural = structuralWinners.firstOrNull {
+                path == it.first || path.startsWith("${it.first}/")
+            }
+            if (structural != null) {
+                val root = structural.first
+                val providerWins = structural.second
+                if (path == root) {
+                    if (providerWins) {
+                        makeDirsInForwarded.add(root)
+                        result[root] = s!!.copy(isDir = true, size = 0, mtime = 0)
+                    } else {
+                        makeDirsInSaf.add(root)
+                        result[root] = SafBridge.NodeInfo(isDir = true)
+                    }
+                    val source = if (providerWins) saf else fwd
+                    for ((child, node) in source.entries
+                        .filter { it.key.startsWith("$root/") }
+                        .sortedWith(compareBy({ depth(it.key) }, { it.key }))) {
+                        if (providerWins) {
+                            if (node.isDir) {
+                                makeDirsInForwarded.add(child)
+                                result[child] = node
+                            } else {
+                                copyToForwarded.add(child to node)
+                                result[child] = node
+                            }
+                        } else {
+                            if (node.isDir) {
+                                makeDirsInSaf.add(child)
+                                result[child] = node
+                            } else {
+                                copyToSaf.add(child)
+                                result[child] = SafBridge.NodeInfo(
+                                    isDir = false,
+                                    size = node.size,
+                                    contentHash = node.contentHash,
+                                )
+                            }
+                        }
+                    }
+                }
+                continue
+            }
+
             val safChanged = !sameNode(s, l)
             val fwdChanged = !sameNode(f, l)
 
             when {
                 !safChanged && !fwdChanged -> {
                     if (s != null) {
-                        result[path] = s
+                        result[path] = if (!s.isDir && s.contentHash == null && l?.contentHash != null) {
+                            s.copy(contentHash = l.contentHash)
+                        } else {
+                            s
+                        }
                     }
                 }
                 safChanged && !fwdChanged -> {
@@ -1106,6 +1274,23 @@ internal object MirrorMerge {
             }
         }
 
+        // If the provider removed a directory while the forwarded side changed one of its
+        // descendants, the descendant is still a required copy source. Keep the forwarded
+        // directory and recreate the provider parent before its child writes; never recursively
+        // delete the parent first.
+        val neededSourcePaths = copyToSaf + makeDirsInSaf
+        for (parent in deleteInForwarded.toList()) {
+            val descendantsNeedForwarded = neededSourcePaths.any {
+                it.startsWith("$parent/")
+            }
+            if (!descendantsNeedForwarded) continue
+            deleteInForwarded.remove(parent)
+            if (fwd[parent]?.isDir == true && saf[parent] == null) {
+                makeDirsInSaf.add(parent)
+                result[parent] = fwd.getValue(parent)
+            }
+        }
+
         return Plan(
             deleteInForwarded = deleteInForwarded.sortedByDescending { depth(it) },
             makeDirsInForwarded = makeDirsInForwarded,
@@ -1114,6 +1299,9 @@ internal object MirrorMerge {
             makeDirsInSaf = makeDirsInSaf,
             copyToSaf = copyToSaf,
             result = result,
+            confirmedAbsent = confirmedAbsent,
+            safAtScan = saf,
+            forwardedAtScan = fwd,
         )
     }
 }
@@ -1151,13 +1339,18 @@ internal interface SafTree {
     }
 
     /** Creates the directory at [path] including parents; true on success. */
-    fun createDir(path: String): Boolean
+    fun createDir(path: String, expectedTarget: SafBridge.NodeInfo?): Boolean
 
-    /** Creates or overwrites the file at [path] with the stream content. */
-    fun writeFile(path: String, data: InputStream): Boolean
+    /** Stages, verifies, and then replaces the target file; sourceInfo includes expected bytes. */
+    fun writeFile(
+        path: String,
+        data: InputStream,
+        sourceInfo: SafBridge.NodeInfo,
+        expectedTarget: SafBridge.NodeInfo?,
+    ): Boolean
 
-    /** Deletes the file or directory (recursively); true on success. */
-    fun delete(path: String): Boolean
+    /** Deletes only the scanned node; directories must already be empty. */
+    fun delete(path: String, expectedTarget: SafBridge.NodeInfo?): Boolean
 }
 
 /**
@@ -1283,16 +1476,44 @@ internal class DocumentFileSafTree(private val context: Context, treeUri: Uri) :
         }
     }
 
-    override fun createDir(path: String): Boolean {
+    override fun createDir(path: String, expectedTarget: SafBridge.NodeInfo?): Boolean {
         return try {
-            ensureDir(path) != null
+            val parentPath = path.substringBeforeLast('/', "")
+            val parent = (if (parentPath.isEmpty()) root else ensureDir(parentPath))
+                ?: return false
+            val name = path.substringAfterLast('/')
+            val existing = parent.findFile(name)
+            if (existing == null) {
+                return expectedTarget == null && parent.createDirectory(name) != null
+            }
+            if (existing.isDirectory) {
+                return expectedTarget?.isDir == true
+            }
+            if (expectedTarget?.isDir != false || !matchesObserved(existing, expectedTarget)) {
+                return false
+            }
+            val backupName = ".syncthing.saf-bridge-${java.util.UUID.randomUUID()}"
+            if (!existing.renameTo(backupName)) return false
+            val backup = parent.findFile(backupName)
+            val created = parent.createDirectory(name)
+            if (created == null) {
+                backup?.renameTo(name)
+                return false
+            }
+            backup?.delete()
+            true
         } catch (e: Exception) {
             Log.w(TAG, "createDir: Failed to create $path", e)
             false
         }
     }
 
-    override fun writeFile(path: String, data: InputStream): Boolean {
+    override fun writeFile(
+        path: String,
+        data: InputStream,
+        sourceInfo: SafBridge.NodeInfo,
+        expectedTarget: SafBridge.NodeInfo?,
+    ): Boolean {
         return try {
             val parentPath = path.substringBeforeLast('/', "")
             val parent = if (parentPath.isEmpty()) root else ensureDir(parentPath)
@@ -1301,29 +1522,173 @@ internal class DocumentFileSafTree(private val context: Context, treeUri: Uri) :
                 return false
             }
             val existing = parent.findFile(name)
+            if (existing == null && expectedTarget != null) return false
+            if (existing != null && !matchesObserved(existing, expectedTarget)) return false
             val extension = name.substringAfterLast('.', "")
             val mimeType = if (extension.isEmpty()) {
                 "application/octet-stream"
             } else {
                 FileUtils.getMimeTypeFromFileExtension(extension).ifEmpty { "application/octet-stream" }
             }
-            val target = existing ?: parent.createFile(mimeType, name) ?: return false
-            context.contentResolver.openOutputStream(target.uri)?.use { output ->
-                data.copyTo(output)
-                output.flush()
-            } ?: return false
-            true
+            val stagedName = ".syncthing.saf-bridge-${java.util.UUID.randomUUID()}"
+            val staged = parent.createFile("application/octet-stream", stagedName) ?: return false
+            var stagedInstalled = false
+            try {
+                context.contentResolver.openOutputStream(staged.uri)?.use { output ->
+                    data.copyTo(output)
+                    output.flush()
+                } ?: return false
+                if (staged.length() != 0L && staged.length() != sourceInfo.size) return false
+                if (documentContentHash(staged) != sourceInfo.contentHash) return false
+                if (!isObservedNodeStillCurrent(path, expectedTarget)) return false
+
+                var backup: DocumentFile? = null
+                if (existing != null) {
+                    if (existing.isDirectory && !containsOnlyInternalChildren(existing)) return false
+                    val backupName = ".syncthing.saf-bridge-${java.util.UUID.randomUUID()}"
+                    if (!existing.renameTo(backupName)) return false
+                    backup = parent.findFile(backupName)
+                    if (backup == null) {
+                        existing.renameTo(name)
+                        return false
+                    }
+                    if (backup.isDirectory && !containsOnlyInternalChildren(backup)) {
+                        backup.renameTo(name)
+                        return false
+                    }
+                }
+
+                if (!staged.renameTo(name)) {
+                    backup?.renameTo(name)
+                    return false
+                }
+                stagedInstalled = true
+                val installed = parent.findFile(name)
+                val verified = installed != null && !installed.isDirectory &&
+                    documentContentHash(installed) == sourceInfo.contentHash
+                if (!verified) {
+                    installed?.delete()
+                    backup?.renameTo(name)
+                    return false
+                }
+                if (backup?.isDirectory == true) {
+                    // Any remaining children were filtered as internal names. Clean them only
+                    // after the replacement is installed; a leftover hidden backup is safer
+                    // than deleting anything the provider reports as user data.
+                    if (deleteInternalChildren(backup) && !backup.delete()) {
+                        Log.w(TAG, "writeFile: Could not remove hidden directory backup for $path")
+                    }
+                } else {
+                    backup?.delete()
+                }
+                true
+            } finally {
+                if (!stagedInstalled) staged.delete()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "writeFile: Failed to write $path", e)
             false
         }
     }
 
-    override fun delete(path: String): Boolean {
+    private fun isObservedNodeStillCurrent(
+        path: String,
+        expected: SafBridge.NodeInfo?,
+    ): Boolean {
+        val current = resolve(path) ?: return expected == null
+        return expected != null && matchesObserved(current, expected)
+    }
+
+    private fun matchesObserved(
+        current: DocumentFile,
+        expected: SafBridge.NodeInfo?,
+    ): Boolean {
+        if (expected == null || current.isDirectory != expected.isDir) return false
+        if (expected.isDir) return true
+        if (current.length() != expected.size) return false
+        if (expected.contentHash != null && documentContentHash(current) != expected.contentHash) {
+            return false
+        }
+        return expected.mtime == 0L || current.lastModified() == 0L ||
+            current.lastModified() == expected.mtime || expected.contentHash != null
+    }
+
+    private fun documentContentHash(document: DocumentFile): String? {
+        return context.contentResolver.openInputStream(document.uri)?.use(ContentHasher::sha256)
+    }
+
+    private fun isEmptyDirectory(document: DocumentFile): Boolean {
+        return document.isDirectory && verifiedChildren(document)?.isEmpty() == true
+    }
+
+    private fun verifiedChildren(document: DocumentFile): List<DocumentFile>? {
+        if (!document.isDirectory) return null
+        val expectedCount = childCount(document) ?: return null
+        val children = document.listFiles().toList()
+        return children.takeIf { it.size == expectedCount }
+    }
+
+    private fun containsOnlyInternalChildren(document: DocumentFile): Boolean {
+        val children = verifiedChildren(document) ?: return false
+        return children.all { isSyncthingInternalName(it.name ?: return false) }
+    }
+
+    /** Removes a subtree already proven to be internal-only, never arbitrary provider children. */
+    private fun deleteInternalChildren(document: DocumentFile): Boolean {
+        val children = verifiedChildren(document) ?: return false
+        for (child in children) {
+            val name = child.name ?: return false
+            if (!isSyncthingInternalName(name)) return false
+            if (child.isDirectory && !deleteInternalSubtree(child)) return false
+            if (!child.delete()) return false
+        }
+        return isEmptyDirectory(document)
+    }
+
+    /** Descendants of an already-approved internal directory are internal by containment. */
+    private fun deleteInternalSubtree(document: DocumentFile): Boolean {
+        val children = verifiedChildren(document) ?: return false
+        for (child in children) {
+            if (child.isDirectory && !deleteInternalSubtree(child)) return false
+            if (!child.delete()) return false
+        }
+        return isEmptyDirectory(document)
+    }
+
+    override fun delete(path: String, expectedTarget: SafBridge.NodeInfo?): Boolean {
         return try {
-            // The path was present in the verified scan that produced this plan. A null result
-            // is therefore treated as unknown/query failure, not as a successful deletion.
-            resolve(path)?.delete() ?: false
+            // A path absent from the scan is already deleted; accepting that no-op lets the
+            // verified snapshot drop entries deleted independently on both sides.
+            val document = resolve(path) ?: return expectedTarget == null
+            if (!matchesObserved(document, expectedTarget)) return false
+            if (!document.isDirectory || isEmptyDirectory(document)) return document.delete()
+
+            // Directories can contain hidden Syncthing metadata excluded from scans. Move the
+            // directory out of the visible path first, recheck its children, and delete only an
+            // internal-only subtree; a concurrent user document causes restoration instead.
+            if (!containsOnlyInternalChildren(document)) return false
+            val parent = resolveParent(path) ?: return false
+            val name = path.substringAfterLast('/')
+            val backupName = ".syncthing.saf-bridge-${java.util.UUID.randomUUID()}"
+            if (!document.renameTo(backupName)) return false
+            val backup = parent.findFile(backupName)
+            if (backup == null) {
+                document.renameTo(name)
+                return false
+            }
+            if (!containsOnlyInternalChildren(backup)) {
+                backup.renameTo(name)
+                return false
+            }
+            if (!deleteInternalChildren(backup)) {
+                backup.renameTo(name)
+                return false
+            }
+            if (!backup.delete()) {
+                backup.renameTo(name)
+                return false
+            }
+            true
         } catch (e: Exception) {
             Log.w(TAG, "delete: Failed to delete $path", e)
             false

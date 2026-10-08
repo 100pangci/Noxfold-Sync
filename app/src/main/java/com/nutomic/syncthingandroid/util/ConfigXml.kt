@@ -28,6 +28,8 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.ArrayList
 
 import javax.xml.parsers.DocumentBuilder
@@ -756,23 +758,53 @@ class ConfigXml(private val context: Context) {
     /**
      * Stores ignore list for given folder.
      */
-    fun postFolderIgnoreList(folder: Folder, ignore: Array<String>) {
+    fun postFolderIgnoreList(folder: Folder, ignore: Array<String>): Boolean {
+        val file = File(folder.path, Constants.FILENAME_STIGNORE)
+        val temp = File(folder.path, ".syncthing.stignore-${java.util.UUID.randomUUID()}.tmp")
         try {
-            val file = File(folder.path, Constants.FILENAME_STIGNORE)
-            if (!file.exists()) {
-                file.createNewFile()
+            val bytes = ignore.joinToString("\n").toByteArray(StandardCharsets.UTF_8)
+            FileOutputStream(temp).use { output ->
+                output.write(bytes)
+                output.flush()
+                output.fd.sync()
             }
-            FileOutputStream(file).use { fileOutputStream ->
-                fileOutputStream.write(ignore.joinToString("\n").toByteArray(StandardCharsets.UTF_8))
-                fileOutputStream.flush()
-            }
+            if (temp.length() != bytes.size.toLong()) return false
+            return replaceFilePreservingOld(temp, file)
         } catch (e: IOException) {
-            /**
-             * This will happen on external storage folders which exist outside the
-             * "/Android/data/[package_name]/files" folder on Android 5+.
-             */
             Log.w(TAG, "postFolderIgnoreList: Failed to write '" + folder.path + "/" + Constants.FILENAME_STIGNORE + "' #1", e)
+            return false
+        } finally {
+            temp.delete()
         }
+    }
+
+    private fun replaceFilePreservingOld(temp: File, target: File): Boolean {
+        if (target.isDirectory) return false
+        try {
+            Files.move(
+                temp.toPath(), target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+            return true
+        } catch (_: Exception) {
+            // Some storage providers/filesystems do not implement atomic replacement.
+        }
+        try {
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            return true
+        } catch (_: Exception) {
+            // Rollback-capable rename fallback below.
+        }
+        val backup = File(target.parentFile, ".${target.name}.backup-${java.util.UUID.randomUUID()}")
+        val hadTarget = target.exists()
+        if (hadTarget && !target.renameTo(backup)) return false
+        if (!temp.renameTo(target)) {
+            if (hadTarget) backup.renameTo(target)
+            return false
+        }
+        if (hadTarget) backup.delete()
+        return true
     }
 
     fun getDevices(includeLocal: Boolean): List<Device> {
@@ -1203,48 +1235,52 @@ class ConfigXml(private val context: Context) {
     /**
      * Writes updated config back to file.
      */
-    fun saveChanges() {
+    fun saveChanges(): Boolean {
         if (!configFile.canWrite() && !ensureCoreFilesReadable()) {
             Log.w(TAG, "Failed to save updated config. Cannot change the owner of the config file.")
-            return
+            return false
         }
 
         Log.i(TAG, "Saving config file")
         val configTempFile = Constants.getConfigTempFile(context)
         try {
-            // Write XML header.
-            val fileOutputStream = FileOutputStream(configTempFile)
-            fileOutputStream.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>".toByteArray(StandardCharsets.UTF_8))
+            FileOutputStream(configTempFile).use { fileOutputStream ->
+                fileOutputStream.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>".toByteArray(StandardCharsets.UTF_8))
 
-            // Prepare Object-to-XML transform.
-            val transformerFactory = TransformerFactory.newInstance()
-            val transformer = transformerFactory.newTransformer()
-            transformer.setOutputProperty(OutputKeys.METHOD, "xml")
-            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-16")
-            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes")
-            transformer.setOutputProperty(OutputKeys.INDENT, "yes")
-            transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4")
+                // Prepare Object-to-XML transform.
+                val transformerFactory = TransformerFactory.newInstance()
+                val transformer = transformerFactory.newTransformer()
+                transformer.setOutputProperty(OutputKeys.METHOD, "xml")
+                transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-16")
+                transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes")
+                transformer.setOutputProperty(OutputKeys.INDENT, "yes")
+                transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4")
 
-            // Output XML body.
-            val byteArrayOutputStream = ByteArrayOutputStream()
-            val streamResult = StreamResult(OutputStreamWriter(byteArrayOutputStream, StandardCharsets.UTF_8))
-            transformer.transform(DOMSource(config), streamResult)
-            val outputBytes = byteArrayOutputStream.toByteArray()
-            fileOutputStream.write(outputBytes)
-            fileOutputStream.close()
+                // Output XML body.
+                val byteArrayOutputStream = ByteArrayOutputStream()
+                val streamResult = StreamResult(OutputStreamWriter(byteArrayOutputStream, StandardCharsets.UTF_8))
+                transformer.transform(DOMSource(config), streamResult)
+                fileOutputStream.write(byteArrayOutputStream.toByteArray())
+                fileOutputStream.flush()
+                fileOutputStream.fd.sync()
+            }
         } catch (e: TransformerException) {
             Log.w(TAG, "Failed to transform object to xml and save temporary config file", e)
-            return
+            configTempFile.delete()
+            return false
         } catch (e: FileNotFoundException) {
             Log.w(TAG, "Failed to save temporary config file, FileNotFoundException", e)
+            configTempFile.delete()
+            return false
         } catch (e: IOException) {
             Log.w(TAG, "Failed to save temporary config file, IOException", e)
+            configTempFile.delete()
+            return false
         }
-        try {
-            configTempFile.renameTo(configFile)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to rename temporary config file to original file", e)
-        }
+        val saved = replaceFilePreservingOld(configTempFile, configFile)
+        if (!saved) Log.w(TAG, "Failed to rename temporary config file to original file")
+        configTempFile.delete()
+        return saved
     }
 
     private fun LogV(logMessage: String) {
