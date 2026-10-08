@@ -1,17 +1,45 @@
-v2.1.6.0-rc.1: SAF synchronization and configuration backup reliability improvements. Pre-release for testing; not the final stable release.
+v2.1.6.0-rc.1 — Pre-release for testing; this is not the final stable release.
 
-## Fixes
-* **SAF bridge**: stage and verify copied files before replacement, protect concurrent changes, and retry failed merge operations without advancing an unverified snapshot
-* **Folder setup/removal**: wait for Syncthing to accept configuration and ignore rules before continuing; report failures instead of starting an incomplete sync
-* **Config backups**: validate exports and imports before installation, preserve the previous backup, and roll back config, database, and preferences if an import fails
-* **Config files**: replace config and ignore-list files transactionally to avoid leaving partial files after a write failure
+## Highlights
+* **Noxfold-Sync rebrand** across the app, store listings, and project materials.
+* **Syncthing core v2.1.6** is now bundled.
+* **Tablet and large-screen layouts**: adaptive content widths, a home navigation rail, side-by-side home/settings lists and detail panes, and a two-pane folder picker. Editor drafts survive window resizing; selection, Back navigation, and pane transitions are more reliable.
+* **Group editing**: folder/device group suggestions refresh from the live configuration whenever the picker opens.
+
+## Sync and data safety
+* **SAF bridge reconciliation** now combines change hints, incremental scans, and periodic full scans. Verified snapshots and content hashes help prevent stale state or failed operations from deleting or overwriting user data.
+* Bridge copies are staged and verified before replacement; concurrent changes are protected, and failed merge operations remain retryable.
+* Folder creation/removal waits for Syncthing configuration acknowledgement. New-folder ignore rules are applied before syncing starts; marker-creation failures are reported.
+* Config and ignore-list files are replaced transactionally. Backup import/export validates archives and config before installation; failed imports roll back config, database, and preferences, while failed exports preserve the previous archive.
+
+## Responsiveness and size
+* Home folder/device groups lazy-load their rows, reducing work on large lists and avoiding scroll jumps. Event parsing and folder-picker filesystem work are moved off the UI thread.
+* Release APKs use R8/resource shrinking and stripped native symbols: arm64 is about 31 MB → 16 MB; universal is about 65 MB → 50 MB.
+
+## Compatibility and internals
+* Minimum Android version is now **Android 8.0 (API 26)**; Android 6 and 7 are no longer supported.
+* REST/model JSON now uses kotlinx.serialization; run-condition events use an in-process Flow bus, and service/event work uses structured coroutines with serialized shutdown handling.
 
 ---
 
-v2.1.6.0-rc.1：改进 SAF 同步桥和配置备份的可靠性。本版本为测试预览版，尚非正式稳定版。
+v2.1.6.0-rc.1 — 测试预览版，尚非正式稳定版。
 
-## 修复与改进
-* **SAF 同步桥**：复制完成并校验后再替换目标，避免覆盖并发修改；合并失败时保留未确认状态并重试
-* **文件夹配置**：等待 Syncthing 确认配置和忽略规则后再继续；失败时明确提示，不启动不完整的同步
-* **配置备份**：导入/导出先校验再安装；导出失败保留旧备份，导入失败时回滚配置、数据库和偏好设置
-* **配置文件**：事务式替换 config 与忽略列表，减少写入失败造成部分文件的风险
+## 主要更新
+* **品牌更名为 Noxfold-Sync**：应用界面、商店页面和项目资料统一更新。
+* **内置 Syncthing core 升级至 v2.1.6**。
+* **平板与大屏适配**：内容限宽；主页改用导航栏；主页和设置支持列表/详情并排，文件夹选择器支持双栏。窗口尺寸变化时保留编辑草稿，并改进选中状态、返回导航和面板切换动画。
+* **分组编辑**：每次打开文件夹/设备分组选择器时，都会从当前配置刷新建议列表。
+
+## 同步与数据安全
+* **重做 SAF 桥接协调**：结合变更提示、增量扫描和周期性全量扫描；通过已验证快照及必要时的内容哈希，降低陈旧状态或失败操作误删、覆盖用户文件的风险。
+* 桥接复制先暂存、校验再替换；保护并发修改，合并失败的操作会保留以便重试。
+* 新建/删除文件夹前等待 Syncthing 确认配置；新文件夹先应用忽略规则再开始同步；标记文件创建失败会明确提示。
+* config 与忽略列表采用事务式替换。备份导入/导出先校验归档和配置；导入失败回滚配置、数据库和偏好设置，导出失败保留旧备份。
+
+## 响应速度与安装包
+* 主页文件夹/设备分组按需加载行，减少大列表开销并修复滚动跳动；事件解析和文件夹选择器的文件系统操作移出 UI 线程。
+* Release APK 启用 R8/资源压缩并剥离原生符号：arm64 约从 31 MB 降到 16 MB，universal 约从 65 MB 降到 50 MB。
+
+## 兼容性与内部改造
+* 最低系统版本提高到 **Android 8.0（API 26）**；不再支持 Android 6 和 7。
+* REST/模型 JSON 改用 kotlinx.serialization；运行条件事件改用进程内 Flow 总线；服务与事件处理改用结构化协程，并串行化关停流程。
