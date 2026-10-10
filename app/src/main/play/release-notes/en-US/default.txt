@@ -1,4 +1,4 @@
-v2.1.6.0-rc.1 — Pre-release for testing; this is not the final stable release.
+v2.1.6.1 — Stable release.
 
 ## Highlights
 * **Noxfold-Sync rebrand** across the app, store listings, and project materials.
@@ -22,7 +22,7 @@ v2.1.6.0-rc.1 — Pre-release for testing; this is not the final stable release.
 
 ---
 
-v2.1.6.0-rc.1 — 测试预览版，尚非正式稳定版。
+v2.1.6.1 — 正式稳定版。
 
 ## 主要更新
 * **品牌更名为 Noxfold-Sync**：应用界面、商店页面和项目资料统一更新。
