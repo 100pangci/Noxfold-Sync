@@ -1,45 +1,29 @@
-v2.1.6.1 — Stable release.
+v2.1.7.0 — Stable release.
 
 ## Highlights
-* **Noxfold-Sync rebrand** across the app, store listings, and project materials.
-* **Syncthing core v2.1.6** is now bundled.
-* **Tablet and large-screen layouts**: adaptive content widths, a home navigation rail, side-by-side home/settings lists and detail panes, and a two-pane folder picker. Editor drafts survive window resizing; selection, Back navigation, and pane transitions are more reliable.
-* **Group editing**: folder/device group suggestions refresh from the live configuration whenever the picker opens.
+* **Syncthing core v2.1.7** is now bundled. This is a maintenance release; the app itself has no user-facing changes since v2.1.6.1.
 
-## Sync and data safety
-* **SAF bridge reconciliation** now combines change hints, incremental scans, and periodic full scans. Verified snapshots and content hashes help prevent stale state or failed operations from deleting or overwriting user data.
-* Bridge copies are staged and verified before replacement; concurrent changes are protected, and failed merge operations remain retryable.
-* Folder creation/removal waits for Syncthing configuration acknowledgement. New-folder ignore rules are applied before syncing starts; marker creation now reports failures and avoids duplicate marker files.
-* Config and ignore-list files are replaced transactionally. Backup import/export validates archives and config before installation; failed imports roll back config, database, and preferences, while failed exports preserve the previous archive.
+## Upstream fixes (Syncthing v2.1.7)
+* **Model**: verify local changes before applying the metadata shortcut; copy parent ownership correctly; compare blocks properly when reconciling receive-only folders.
+* **Database**: handle missing max-sequence file entries, avoid early garbage collection of deleted receive-encrypted files, and stop generating unbounded prepared statements.
+* **Protocol**: validate incoming messages and turn panics on malformed data into protocol errors; cap body sizes for requests to public services.
+* **Discovery**: skip unnecessary identical global announce updates and honour retry-after.
 
-## Responsiveness and size
-* Home folder/device groups lazy-load their rows, reducing work on large lists and avoiding scroll jumps. Routine sync-state updates are isolated from inactive home destinations; event parsing and folder-picker filesystem work are moved off the UI thread.
-* Release APKs use R8/resource shrinking and stripped native symbols: arm64 is about 31 MB → 16 MB; universal is about 65 MB → 50 MB.
-
-## Compatibility and internals
-* Minimum Android version is now **Android 8.0 (API 26)**; Android 6 and 7 are no longer supported.
-* REST/model JSON now uses kotlinx.serialization; run-condition events use an in-process Flow bus, and service/event work uses structured coroutines with serialized shutdown handling. Legacy asynchronous query/handler code was removed.
+## Notes
+* No database or configuration migration is required; upgrading from v2.1.6.x is a drop-in update.
 
 ---
 
-v2.1.6.1 — 正式稳定版。
+v2.1.7.0 — 正式稳定版。
 
 ## 主要更新
-* **品牌更名为 Noxfold-Sync**：应用界面、商店页面和项目资料统一更新。
-* **内置 Syncthing core 升级至 v2.1.6**。
-* **平板与大屏适配**：内容限宽；主页改用导航栏；主页和设置支持列表/详情并排，文件夹选择器支持双栏。窗口尺寸变化时保留编辑草稿，并改进选中状态、返回导航和面板切换动画。
-* **分组编辑**：每次打开文件夹/设备分组选择器时，都会从当前配置刷新建议列表。
+* **内置 Syncthing core 升级至 v2.1.7**。本次为维护性更新，应用本身相对 v2.1.6.1 没有面向用户的变化。
 
-## 同步与数据安全
-* **重做 SAF 桥接协调**：结合变更提示、增量扫描和周期性全量扫描；通过已验证快照及必要时的内容哈希，降低陈旧状态或失败操作误删、覆盖用户文件的风险。
-* 桥接复制先暂存、校验再替换；保护并发修改，合并失败的操作会保留以便重试。
-* 新建/删除文件夹前等待 Syncthing 确认配置；新文件夹先应用忽略规则再开始同步；标记文件创建失败会明确提示，并避免重复生成标记文件。
-* config 与忽略列表采用事务式替换。备份导入/导出先校验归档和配置；导入失败回滚配置、数据库和偏好设置，导出失败保留旧备份。
+## 上游修复（Syncthing v2.1.7）
+* **模型**：应用元数据快捷路径前先校验本地变更；正确复制父目录属主；仅接收文件夹重建时正确比较数据块。
+* **数据库**：处理缺失的 max-sequence 文件记录；避免已删除的接收加密文件被过早回收；不再生成无上限的预编译语句。
+* **协议**：校验入站消息并将畸形数据引发的 panic 转为协议错误；限制发往公共服务请求的报文体大小。
+* **发现服务**：跳过无变化的全局公告更新，并遵守 retry-after。
 
-## 响应速度与安装包
-* 主页文件夹/设备分组按需加载行，减少大列表开销并修复滚动跳动；常规同步状态更新不会让非当前主页页面重复刷新；事件解析和文件夹选择器的文件系统操作移出 UI 线程。
-* Release APK 启用 R8/资源压缩并剥离原生符号：arm64 约从 31 MB 降到 16 MB，universal 约从 65 MB 降到 50 MB。
-
-## 兼容性与内部改造
-* 最低系统版本提高到 **Android 8.0（API 26）**；不再支持 Android 6 和 7。
-* REST/模型 JSON 改用 kotlinx.serialization；运行条件事件改用进程内 Flow 总线；服务与事件处理改用结构化协程，并串行化关停流程；移除了遗留异步查询/Handler 代码。
+## 说明
+* 无需数据库或配置迁移，从 v2.1.6.x 直接升级即可。
